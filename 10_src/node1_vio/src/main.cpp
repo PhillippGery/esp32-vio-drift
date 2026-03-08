@@ -10,7 +10,6 @@
  *  4. Transmit JSON odometry packet over WiFi UDP at 50 Hz
  *
  * @author  Phillipp Gery (Kalman), Panchtio (Camera), Sam (Firmware)
- * @course  ECE 56800 — Purdue University, Spring 2026
  */
 
 #include <Arduino.h>

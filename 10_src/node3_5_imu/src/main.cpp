@@ -7,7 +7,6 @@
  *  Flash with: pio run -e node3 --target upload   (or node4 / node5)
  *
  * @author  Sam (Firmware)
- * @course  ECE 56800 — Purdue University, Spring 2026
  */
 
 #include <Arduino.h>

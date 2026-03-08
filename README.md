@@ -1,6 +1,5 @@
 # PROJECT DRIFT — Visual-Inertial Odometry on a 5-Node ESP32 Network
 
-> **Course:** ECE 56800 — Embedded Systems | Purdue University | Spring 2026
 > **Repository:** `esp32-vio-drift`
 
 ---
@@ -133,5 +132,4 @@ See [`CONTRIBUTING.md`](CONTRIBUTING.md) for the full branching model.
 
 ## License
 
-This project is submitted as coursework for **ECE 56800 — Embedded Systems**
-at Purdue University, Spring 2026. All rights reserved by the project team.
+All rights reserved by the project team.

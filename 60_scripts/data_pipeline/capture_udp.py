@@ -10,7 +10,6 @@ Each node sends a packet like:
      "gx": 0.001, "gy": -0.002, "gz": 0.0003}
 
 Author: Sam / PROJECT DRIFT
-Course: ECE 56800 — Purdue University, Spring 2026
 """
 
 import argparse

@@ -9,7 +9,6 @@
  *    bx, by, bz]        gyro bias (rad/s)
  *
  * @author Phillipp Gery
- * @course ECE 56800 — Purdue University, Spring 2026
  */
 
 #pragma once

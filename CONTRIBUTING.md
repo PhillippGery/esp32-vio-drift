@@ -140,4 +140,4 @@ git add .gitattributes
 
 ## Questions?
 
-Open a GitHub Issue or ping the team on the course Slack channel.
+Open a GitHub Issue or ping the team on Slack.

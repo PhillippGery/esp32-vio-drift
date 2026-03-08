@@ -8,7 +8,6 @@
  *  2. Transmit JSON sensor packet over WiFi UDP at 100 Hz
  *
  * @author  Sam (Firmware)
- * @course  ECE 56800 — Purdue University, Spring 2026
  */
 
 #include <Arduino.h>
