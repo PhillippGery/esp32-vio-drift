@@ -1,0 +1,21 @@
+# PROJECT DRIFT — Python dependencies
+# Install with: pip install -r requirements.txt
+
+# Serial communication
+pyserial>=3.5
+
+# Data handling
+numpy>=1.26
+pandas>=2.2
+
+# Visualization / dashboard
+matplotlib>=3.8
+plotly>=5.20
+dash>=2.16           # Jack's real-time dashboard
+
+# Calibration & CV (camera calibration)
+opencv-python>=4.9
+
+# Utilities
+tqdm>=4.66
+rich>=13.7           # pretty terminal output
