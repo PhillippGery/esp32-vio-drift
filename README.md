@@ -22,7 +22,7 @@ classifier compiled to TFLite Micro and deployed on the VIO node.
 
 | Name | Role |
 |---|---|
-| **Phillipp Gery** | Team Lead · Kalman Filter design & implementation |
+| **Phillipp Gery** | Team Lead · Kalman Filter design & implementation & Project Structure |
 | **Panchtio** | Camera integration (ArduCAM Mini SPI, frame capture pipeline) |
 | **Sam** | Firmware architecture, PlatformIO build system, Node 2–5 firmware |
 | **Vedant** | Sensor fusion, TinyML pipeline (Edge Impulse → TFLite Micro) |
