@@ -13,6 +13,7 @@
 #include <Arduino.h>
 #include <Wire.h>
 #include <ArduinoJson.h>
+#include "MPU6050.h"
 
 #ifndef NODE_ID
 #define NODE_ID 2
@@ -30,18 +31,25 @@ constexpr uint32_t TX_PERIOD_MS  = 10;  // 100 Hz
 static uint32_t lastImuMs = 0;
 static uint32_t lastTxMs  = 0;
 
+MPU6050 imu;
+
 void setup() {
     Serial.begin(115200);
-    while (!Serial && millis() < 3000) {}
-
-    Serial.printf("[NODE %d] PROJECT DRIFT — IMU Node booting...\n", NODE_ID);
-
-    Wire.begin(IMU_I2C_SDA, IMU_I2C_SCL);
+    Wire.begin(22, 14);
+    imu.begin();
+    
+    
+    
 
     // TODO (Sam): MPU-6050 init
     // TODO (Sam): WiFi + UDP socket init
 
     Serial.printf("[NODE %d] Setup complete.\n", NODE_ID);
+    Serial.println("Calibrating — keep sensor still...");
+    imu.calibrate();
+    Serial.printf("=== Calibration Complete ===\n");
+    Serial.printf("Offsets ax:%.4f ay:%.4f az:%.4f\n",
+        imu.offsetAx, imu.offsetAy, imu.offsetAz);
 }
 
 void loop() {
@@ -50,6 +58,11 @@ void loop() {
     if (now - lastImuMs >= IMU_PERIOD_MS) {
         lastImuMs = now;
         // TODO (Sam): read IMU → store sample
+        float ax, ay, az, gx, gy, gz;
+        imu.read(ax, ay, az, gx, gy, gz);
+        Serial.printf("A: %.3f  %.3f  %.3f  |  G: %.3f  %.3f  %.3f\n",
+                  ax, ay, az, gx, gy, gz);
+        delay(20);
     }
 
     if (now - lastTxMs >= TX_PERIOD_MS) {
