@@ -16,6 +16,7 @@
 #include <Wire.h>
 #include <SPI.h>
 #include <ArduinoJson.h>
+#include "ekf.h"
 
 // TODO (Panchtio): include ArduCAM headers
 // TODO (Phillipp): include EKF header from include/ekf.h
@@ -53,6 +54,7 @@ void setup() {
 
     // TODO (Sam):    WiFi + UDP socket init
     // TODO (Phillipp): EKF init
+    drift::ekfInit();
     // TODO (Panchtio): ArduCAM init + test JPEG capture
 
     Serial.println("[NODE 1] Setup complete.");
@@ -63,12 +65,13 @@ void loop() {
     uint32_t now = millis();
 
 
-    Serial.println("[NODE 1] Test print in Loop.");
+    //Serial.println("[NODE 1] Test print in Loop.");
 
     // ── IMU read ─────────────────────────────────────────────────────────
     if (now - lastImuMs >= IMU_PERIOD_MS) {
         lastImuMs = now;
         // TODO (Phillipp): readIMU() → EKF predict step
+        
     }
 
     // ── Camera capture ───────────────────────────────────────────────────
