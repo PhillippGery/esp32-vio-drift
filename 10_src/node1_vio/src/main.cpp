@@ -17,6 +17,7 @@
 #include <SPI.h>
 #include <ArduinoJson.h>
 #include "ekf.h"
+#include "status_led.h"
 
 // TODO (Panchtio): include ArduCAM headers
 // TODO (Phillipp): include EKF header from include/ekf.h
@@ -55,6 +56,8 @@ void setup() {
     // TODO (Sam):    WiFi + UDP socket init
     // TODO (Phillipp): EKF init
     drift::ekfInit();
+    drift::ledInit();
+    drift::ledSet(drift::StatusColor::RED);
     // TODO (Panchtio): ArduCAM init + test JPEG capture
 
     Serial.println("[NODE 1] Setup complete.");
@@ -63,6 +66,14 @@ void setup() {
 // ─────────────────────────────────────────────────────────────────────────
 void loop() {
     uint32_t now = millis();
+
+
+    if (now > 5000) {
+        drift::ledSet(drift::StatusColor::GREEN);
+    } else {
+        drift::ledSet(drift::StatusColor::RED);
+    }
+    
 
 
     //Serial.println("[NODE 1] Test print in Loop.");
