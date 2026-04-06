@@ -327,3 +327,15 @@ void loop() {
     esp_camera_fb_return(fb);
     vTaskDelay(pdMS_TO_TICKS(50));
 }
+
+
+
+
+
+
+
+
+
+// lkscdlksdlcjsd
+//sncnsl;dv;lsd;
+
