@@ -62,6 +62,9 @@ void setup() {
 void loop() {
     uint32_t now = millis();
 
+
+    Serial.println("[NODE 1] Test print in Loop.");
+
     // ── IMU read ─────────────────────────────────────────────────────────
     if (now - lastImuMs >= IMU_PERIOD_MS) {
         lastImuMs = now;
