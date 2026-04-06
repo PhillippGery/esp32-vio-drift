@@ -1,16 +1,18 @@
-/**
- * @file    main.cpp
- * @brief   PROJECT DRIFT — Node 1 VIO Firmware
- *          ESP32 Feather V2 + MPU-6050 + ArduCAM Mini SPI
- *
- * Pipeline overview:
- *  1. Read IMU at 200 Hz → pre-filter (complementary / Madgwick)
- *  2. Capture ArduCAM frame on trigger (feature extraction later)
- *  3. Run Extended Kalman Filter: predict (IMU) + update (camera features)
- *  4. Transmit JSON odometry packet over WiFi UDP at 50 Hz
- *
- * @author  Phillipp Gery (Kalman), Panchtio (Camera), Sam (Firmware)
- */
+// ============================================================
+// PROJECT DRIFT — Node 1: Full VIO Pipeline
+// Board: Seeed XIAO ESP32S3 Sense (OV3660)
+// Framework: Arduino (ESP-IDF APIs used throughout)
+//
+// Pipeline: CAPTURE -> FAST -> LK Flow -> Accumulate -> EKF
+//
+// The flow accumulator averages optical flow over N frames
+// to produce stable displacement estimates for the EKF.
+//
+// EKF State Vector (12-DOF, from Phillipp):
+//   [px, py, pz, vx, vy, vz, roll, pitch, yaw, bx, by, bz]
+//   Camera updates: px, py (via accumulated pixel displacement)
+//   IMU updates:    all 12 states
+// ============================================================
 
 #include <Arduino.h>
 #include <Wire.h>
@@ -79,7 +81,9 @@ void setup() {
     Serial.println("[NODE 1] Setup complete.");
 }
 
-// ─────────────────────────────────────────────────────────────────────────
+// ------------------------------------------------------------
+// loop() — full VIO pipeline with flow accumulation
+// ------------------------------------------------------------
 void loop() {
     uint32_t now = millis();
 
