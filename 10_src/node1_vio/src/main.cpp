@@ -106,6 +106,7 @@ void loop() {
         if (drift::cameraProcessFrame(dx, dy, confidence)) {
             // EKF UPDATE: Feed the visual displacement to the math engine!
             drift::ekfUpdateCamera(dx, dy); 
+            printf("[NODE 1] EKF updated with camera measurement: dx=%.3f m, dy=%.3f m, confidence=%.2f\n", dx, dy, confidence);
         }
     }
 
