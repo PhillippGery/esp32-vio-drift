@@ -48,6 +48,7 @@ static uint32_t lastCamMs  = 0;
 
 MPU6050 imu;
 
+
 // ─────────────────────────────────────────────────────────────────────────
 void setup() {
     Serial.begin(115200);
@@ -57,6 +58,14 @@ void setup() {
 
     // Initialize I2C for the MPU-6050
     Wire.begin(IMU_I2C_SDA, IMU_I2C_SCL);
+    imu.begin(); // Default I2C address 0x68, can be changed if needed
+    // Calibrate IMU (stationary, flat surface)
+    // Init imu
+    Serial.println("Calibrating — keep sensor still...");
+    imu.calibrate();
+    Serial.printf("=== Calibration Complete ===\n");
+    Serial.printf("Offsets ax:%.4f ay:%.4f az:%.4f\n",
+        imu.offsetAx, imu.offsetAy, imu.offsetAz);
     
     // Initialize Kalman Filter Matrices
     drift::ekfInit();
@@ -79,14 +88,9 @@ void setup() {
     // drift::ledInit();
     // drift::ledSet(drift::StatusColor::RED);
 
-    Serial.printf("[NODE %d] Setup complete.\n", NODE_ID);
-    Serial.println("Calibrating — keep sensor still...");
-    imu.calibrate();
-    Serial.printf("=== Calibration Complete ===\n");
-    Serial.printf("Offsets ax:%.4f ay:%.4f az:%.4f\n",
-        imu.offsetAx, imu.offsetAy, imu.offsetAz);
     
-
+    
+    
 
     Serial.println("[NODE 1] Setup complete.");
 }
@@ -110,7 +114,7 @@ void loop() {
         float ax, ay, az, gx, gy, gz;
         imu.read(ax, ay, az, gx, gy, gz);
         Serial.printf("A: %.3f  %.3f  %.3f  |  G: %.3f  %.3f  %.3f\n",
-                  ax, ay, az, gx, gy, gz);
+                ax, ay, az, gx, gy, gz);
         delay(20);
         
     }
@@ -125,7 +129,7 @@ void loop() {
         if (drift::cameraProcessFrame(dx, dy, confidence)) {
             // EKF UPDATE: Feed the visual displacement to the math engine!
             drift::ekfUpdateCamera(dx, dy); 
-            printf("[NODE 1] EKF updated with camera measurement: dx=%.3f m, dy=%.3f m, confidence=%.2f\n", dx, dy, confidence);
+            //printf("[NODE 1] EKF updated with camera measurement: dx=%.3f m, dy=%.3f m, confidence=%.2f\n", dx, dy, confidence);
         }
     }
 

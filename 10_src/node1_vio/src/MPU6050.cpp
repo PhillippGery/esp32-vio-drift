@@ -74,7 +74,7 @@ void MPU6050::calibrate(int samples, int delayMs) {
   
   offsetAx = sx / samples;
   offsetAy = sy / samples;
-  offsetAz = sz / samples;
+  offsetAz = (sz / samples) - 9.81f; // Account for gravity
   offsetGx = sgx / samples;
   offsetGy = sgy / samples;
   offsetGz = sgz / samples;
