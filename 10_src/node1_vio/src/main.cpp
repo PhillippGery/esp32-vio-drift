@@ -21,6 +21,7 @@
 #include "ekf.h"
 #include "status_led.h"
 #include "vio_camera.h"
+#include "mpu6050.h"
 
 // TODO (Panchtio): include ArduCAM headers
 // TODO (Phillipp): include EKF header from include/ekf.h
@@ -45,6 +46,8 @@ static uint32_t lastImuMs  = 0;
 static uint32_t lastTxMs   = 0;
 static uint32_t lastCamMs  = 0;
 
+MPU6050 imu;
+
 // ─────────────────────────────────────────────────────────────────────────
 void setup() {
     Serial.begin(115200);
@@ -57,7 +60,10 @@ void setup() {
     
     // Initialize Kalman Filter Matrices
     drift::ekfInit();
-    
+
+
+
+    // TODO (Panchtio): ArduCAM init + test JPEG capture
     // Initialize XIAO OV3660 Camera Pipeline & PSRAM
     if (drift::cameraInit()) {
         Serial.println("[NODE 1] Camera initialized successfully.");
@@ -73,9 +79,13 @@ void setup() {
     // drift::ledInit();
     // drift::ledSet(drift::StatusColor::RED);
 
-    // TODO (Panchtio): ArduCAM init + test JPEG capture
-
-
+    Serial.printf("[NODE %d] Setup complete.\n", NODE_ID);
+    Serial.println("Calibrating — keep sensor still...");
+    imu.calibrate();
+    Serial.printf("=== Calibration Complete ===\n");
+    Serial.printf("Offsets ax:%.4f ay:%.4f az:%.4f\n",
+        imu.offsetAx, imu.offsetAy, imu.offsetAz);
+    
 
 
     Serial.println("[NODE 1] Setup complete.");
@@ -97,6 +107,11 @@ void loop() {
     if (now - lastImuMs >= IMU_PERIOD_MS) {
         lastImuMs = now;
         // TODO (Phillipp): readIMU() → EKF predict step
+        float ax, ay, az, gx, gy, gz;
+        imu.read(ax, ay, az, gx, gy, gz);
+        Serial.printf("A: %.3f  %.3f  %.3f  |  G: %.3f  %.3f  %.3f\n",
+                  ax, ay, az, gx, gy, gz);
+        delay(20);
         
     }
 
