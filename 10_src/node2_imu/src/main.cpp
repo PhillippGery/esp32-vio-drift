@@ -15,6 +15,7 @@
 #include <ArduinoJson.h>
 #include "MPU6050.h"
 #include "dead_reckoning.h"
+#include "status_led.h"
 
 #ifndef NODE_ID
 #define NODE_ID 2
@@ -39,23 +40,29 @@ void setup() {
     Serial.begin(115200);
     Wire.begin(22, 14);
     imu.begin();
-    
+
+    drift::ledInit();
+    drift::ledSet(drift::StatusColor::RED);
     
     
 
     // TODO (Sam): MPU-6050 init
     // TODO (Sam): WiFi + UDP socket init
 
-    Serial.printf("[NODE %d] Setup complete.\n", NODE_ID);
+    
     Serial.println("Calibrating — keep sensor still...");
     imu.calibrate();
     Serial.printf("=== Calibration Complete ===\n");
-    Serial.printf("Offsets ax:%.4f ay:%.4f az:%.4f\n",
-                  imu.offsetAx, imu.offsetAy, imu.offsetAz);
+    Serial.printf("Offsets ax:%.4f ay:%.4f az:%.4f\n", imu.offsetAx, imu.offsetAy, imu.offsetAz);
+    Serial.printf("[NODE %d] Setup complete.\n", NODE_ID);
+    drift::ledSet(drift::StatusColor::GREEN);
 }
 
 void loop() {
     uint32_t now = millis();
+
+
+
 
     if (now - lastImuMs >= IMU_PERIOD_MS) {
         float dt = (now - lastImuMs) / 1000.0f; // dt in seconds
