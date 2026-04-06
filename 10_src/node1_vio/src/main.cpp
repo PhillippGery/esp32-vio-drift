@@ -64,9 +64,10 @@ void setup() {
     Serial.println("Calibrating — keep sensor still...");
     imu.calibrate();
     Serial.printf("=== Calibration Complete ===\n");
-    Serial.printf("Offsets ax:%.4f ay:%.4f az:%.4f\n",
-        imu.offsetAx, imu.offsetAy, imu.offsetAz);
+    Serial.printf("Offsets ax:%.4f ay:%.4f az:%.4f\n",imu.offsetAx, imu.offsetAy, imu.offsetAz);
     
+    
+    // TODO (Phillipp): EKF init
     // Initialize Kalman Filter Matrices
     drift::ekfInit();
 
@@ -82,16 +83,13 @@ void setup() {
     }
 
     // TODO (Sam):    WiFi + UDP socket init
-    // TODO (Phillipp): EKF init
+
 
     // drift::ekfInit();
     // drift::ledInit();
     // drift::ledSet(drift::StatusColor::RED);
 
     
-    
-    
-
     Serial.println("[NODE 1] Setup complete.");
 }
 
@@ -104,17 +102,13 @@ void loop() {
 
     
 
-
-    //Serial.println("[NODE 1] Test print in Loop.");
-
     // ── IMU read ─────────────────────────────────────────────────────────
     if (now - lastImuMs >= IMU_PERIOD_MS) {
         lastImuMs = now;
         // TODO (Phillipp): readIMU() → EKF predict step
         float ax, ay, az, gx, gy, gz;
         imu.read(ax, ay, az, gx, gy, gz);
-        Serial.printf("A: %.3f  %.3f  %.3f  |  G: %.3f  %.3f  %.3f\n",
-                ax, ay, az, gx, gy, gz);
+        //Serial.printf("A: %.3f  %.3f  %.3f  |  G: %.3f  %.3f  %.3f\n", x, ay, az, gx, gy, gz);
         delay(20);
         
     }
@@ -129,7 +123,7 @@ void loop() {
         if (drift::cameraProcessFrame(dx, dy, confidence)) {
             // EKF UPDATE: Feed the visual displacement to the math engine!
             drift::ekfUpdateCamera(dx, dy); 
-            //printf("[NODE 1] EKF updated with camera measurement: dx=%.3f m, dy=%.3f m, confidence=%.2f\n", dx, dy, confidence);
+            printf("[NODE 1] EKF updated with camera measurement: dx=%.3f m, dy=%.3f m, confidence=%.2f\n", dx, dy, confidence);
         }
     }
 

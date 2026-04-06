@@ -8,7 +8,7 @@
 
 PROJECT DRIFT investigates real-time **Visual-Inertial Odometry (VIO)** on
 resource-constrained embedded hardware. A primary VIO node fuses IMU readings
-(MPU-6050) with camera frames (ArduCAM Mini SPI) using an Extended Kalman
+(MPU-6050) with camera frames (XIAO ESP32S3 Sense) using an Extended Kalman
 Filter running directly on an ESP32 Feather V2. Four additional IMU-only nodes
 broadcast raw sensor data over the same network for reference measurements and
 stress-testing the fusion pipeline.
@@ -23,7 +23,7 @@ classifier compiled to TFLite Micro and deployed on the VIO node.
 | Name | Role |
 |---|---|
 | **Phillipp Gery** | Team Lead · Kalman Filter design & implementation & Project Structure |
-| **Panchtio** | Camera integration (ArduCAM Mini SPI, frame capture pipeline) |
+| **Panchtio** | Camera integration (XIAO ESP32S3 Sense, frame capture pipeline) |
 | **Sam** | Firmware architecture, PlatformIO build system, Node 2–5 firmware |
 | **Vedant** | Sensor fusion, TinyML pipeline (Edge Impulse → TFLite Micro) |
 | **Jack** | Evaluation, drift analysis, visualization dashboard |
@@ -36,7 +36,7 @@ classifier compiled to TFLite Micro and deployed on the VIO node.
 |---|---|---|
 | ESP32 Feather V2 (Adafruit) | Microcontroller for all 5 nodes | 5 |
 | MPU-6050 | 6-axis IMU (accel + gyro) via I²C | 5 |
-| ArduCAM Mini SPI (OV2640) | 2 MP SPI camera — Node 1 only | 1 |
+| XIAO ESP32S3 Sense (OV2640) | 2 MP SPI camera — Node 1 only | 1 |
 | Micro-USB cables | Programming & power | 5 |
 | Breadboards + jumper wires | Prototyping | — |
 
@@ -47,7 +47,7 @@ classifier compiled to TFLite Micro and deployed on the VIO node.
 ```
 esp32-vio-drift/
 ├── 10_src/               ← PlatformIO firmware projects
-│   ├── node1_vio/        Node 1: ESP32 + MPU-6050 + ArduCAM (VIO)
+│   ├── node1_vio/        Node 1: ESP32 + MPU-6050 + ESP32S3 Sense (VIO)
 │   ├── node2_imu/        Node 2: ESP32 + MPU-6050 (IMU reference)
 │   └── node3_5_imu/      Nodes 3–5: shared firmware (identical to Node 2)
 ├── 20_docs/              ← Design documentation
