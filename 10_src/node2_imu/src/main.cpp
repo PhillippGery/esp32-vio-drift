@@ -53,14 +53,9 @@ void setup() {
     Serial.println("Calibrating — keep sensor still...");
     imu.calibrate();
     Serial.printf("=== Calibration Complete ===\n");
-<<<<<<< HEAD
-    Serial.printf("Offsets ax:%.4f ay:%.4f az:%.4f\n",
-        imu.offsetAx, imu.offsetAy, imu.offsetAz);
-=======
     Serial.printf("Offsets ax:%.4f ay:%.4f az:%.4f\n", imu.offsetAx, imu.offsetAy, imu.offsetAz);
     Serial.printf("[NODE %d] Setup complete.\n", NODE_ID);
     drift::ledSet(drift::StatusColor::GREEN);
->>>>>>> feature/node2-5-imu
 }
 
 void loop() {
