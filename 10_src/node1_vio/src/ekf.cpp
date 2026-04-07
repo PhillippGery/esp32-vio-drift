@@ -14,49 +14,51 @@ static Matrix<drift::STATE_DIM, drift::STATE_DIM> P;
 // Process Noise Covariance (How much we drift per step)
 static Matrix<drift::STATE_DIM, drift::STATE_DIM> Q;
 
+static drift::EkfConfig active_config;
+
 namespace drift {
 
 void ekfInit() {
-    // 1. Zero out the initial state
+    //Zero out the initial state
     x.Fill(0.0f);
 
-    // 2. Initialize Covariance Matrix (P)
+    // Initialize Covariance Matrix (P)
     P.Fill(0.0f);
     for (int i = 0; i < STATE_DIM; i++) {
-        P(i, i) = 1.0f; // Start with baseline uncertainty
+        P(i, i) = active_config.p_init; // Start with baseline uncertainty
     }
 
-    // 3. Initialize Process Noise (Q)
+    // Initialize Process Noise (Q)
     Q.Fill(0.0f);
     // Tune these values based on your specific MPU-6050's noise characteristics
-    Q(0, 0) = 0.001f; // px noise
-    Q(1, 1) = 0.001f; // py noise
-    Q(2, 2) = 0.01f;  // vx noise
-    Q(3, 3) = 0.01f;  // vy noise
-    Q(4, 4) = 0.005f; // yaw noise
-    Q(5, 5) = 0.0001f; // gyro bias noise (changes very slowly)
+    Q(0, 0) = active_config.q_px; // px noise
+    Q(1, 1) = active_config.q_py; // py noise
+    Q(2, 2) = active_config.q_vx;  // vx noise
+    Q(3, 3) = active_config.q_vy;  // vy noise
+    Q(4, 4) = active_config.q_yaw; // yaw noise
+    Q(5, 5) = active_config.q_bgz; // gyro bias noise (changes very slowly)
 }
 
 void ekfPredict(float ax, float ay, float gz, float dt) {
-    // 1. Extract current state variables
+    // Extract current state variables
     float px = x(0), py = x(1);
     float vx = x(2), vy = x(3);
     float yaw = x(4), bgz = x(5);
 
-    // 2. Correct raw gyro data using our current bias estimate
+    // Correct raw gyro data using our current bias estimate
     float wz = gz - bgz;
     float yaw_new = yaw + wz * dt;
 
-    // 3. Trigonometry for the 2D Rotation Matrix
+    // Trigonometry for the 2D Rotation Matrix
     float c = cos(yaw);
     float s = sin(yaw);
 
-    // 4. Rotate Acceleration to Global Frame
-    // WARNING: ax and ay MUST have the static calibration offset removed before arriving here!
+    // Rotate Acceleration to Global Frame
+
     float a_global_x = ax * c - ay * s;
     float a_global_y = ax * s + ay * c;
 
-    // 5. Update State Vector (x)
+    // Update State Vector (x)
     x(0) = px + vx * dt;                 // p_x
     x(1) = py + vy * dt;                 // p_y
     x(2) = vx + a_global_x * dt;         // v_x
@@ -64,7 +66,7 @@ void ekfPredict(float ax, float ay, float gz, float dt) {
     x(4) = yaw_new;                      // yaw
     x(5) = bgz;                          // bias stays constant in predict
 
-    // 6. Build the Jacobian Matrix (F_mat)
+    // Build the Jacobian Matrix (F_mat)
     Matrix<STATE_DIM, STATE_DIM> F_mat;
     F_mat.Fill(0.0f);
     
@@ -84,7 +86,7 @@ void ekfPredict(float ax, float ay, float gz, float dt) {
     // How gyro bias affects the yaw estimate
     F_mat(4, 5) = -dt; // d(yaw) / d(bgz)
 
-    // 7. Update the Covariance Matrix (P = F * P * F^T + Q)
+    // Update the Covariance Matrix (P = F * P * F^T + Q)
     P = F_mat * P * (~F_mat) + Q;
 }
 
@@ -102,8 +104,7 @@ void ekfUpdateCamera(float meas_vx, float meas_vy, float meas_yaw, float confide
 
     // Define Measurement Noise Covariance (R)
     // High confidence = tiny noise = massive Kalman Gain.
-    float base_noise = 0.001f;
-    float scaled_noise = base_noise / (confidence + 0.00001f); // Avoid divide by zero
+    float scaled_noise = active_config.cam_base_noise / (confidence + 0.00001f); // Avoid divide by zero
     
     Matrix<3, 3> R = {
         scaled_noise, 0.0f, 0.0f,
@@ -150,6 +151,17 @@ void ekfGetPosition(float &px, float &py) {
 
 void ekfGetOrientation(float &yaw) {
     yaw = x(4);
+}
+
+void ekfReset() {
+    // Force the state vector back to origin and zero velocity
+    x.Fill(0.0f);
+
+    // Reset the Covariance Matrix (P) back to its initial uncertainty
+    P.Fill(0.0f);
+    for (int i = 0; i < STATE_DIM; i++) {
+        P(i, i) = active_config.p_init; 
+    }
 }
 
 } // namespace drift

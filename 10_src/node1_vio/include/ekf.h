@@ -11,6 +11,24 @@ constexpr int STATE_DIM = 6;
  */
 void ekfInit();
 
+// ─── The Tuning Payload ──────────────────────────────────────────────────
+struct EkfConfig {
+    // Initial Covariance (P)
+    float p_init = 1.0f;
+    
+    // Process Noise (Q) - How much drift we expect per step
+    float q_px  = 0.001f;
+    float q_py  = 0.001f;
+    float q_vx  = 0.01f;
+    float q_vy  = 0.01f;
+    float q_yaw = 0.005f;
+    float q_bgz = 0.0001f;
+    
+    // Measurement Noise (R) - Camera baseline error
+    float cam_base_noise = 0.001f;
+};
+
+
 /**
  * @brief Predict step: Drives the physics engine forward using IMU data.
  * @param ax Linear acceleration in X (m/s^2) - MUST be static-bias corrected!
@@ -38,5 +56,12 @@ void ekfGetPosition(float &px, float &py);
  * @brief Retrieves the current orientation estimate for telemetry.
  */
 void ekfGetOrientation(float &yaw);
+
+
+/**
+ * @brief Forces the state vector back to absolute zero and resets uncertainty.
+ * Use this after hardware initialization or when recovering from a crash.
+ */
+void ekfReset();
 
 } // namespace drift

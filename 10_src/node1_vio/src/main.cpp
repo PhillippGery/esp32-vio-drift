@@ -70,12 +70,7 @@ void setup() {
     Serial.printf("Offsets ax:%.4f ay:%.4f az:%.4f\n",imu.offsetAx, imu.offsetAy, imu.offsetAz);
     
     
-    // TODO (Phillipp): EKF init
-    // Initialize Kalman Filter Matrices
-    drift::ekfInit();
-    delay(100); 
-    drift::ekfGetOrientation(initial_yaw);
-    Serial.println("[NODE 1] EKF Initialized.");
+    
 
 
     if (VISION_ENABLED) {
@@ -94,10 +89,19 @@ void setup() {
     // TODO (Sam):    WiFi + UDP socket init
 
 
+    // TODO (Phillipp): EKF init
+    // Initialize Kalman Filter Matrices
     drift::ekfInit();
-    // drift::ledInit();
-    // drift::ledSet(drift::StatusColor::RED);
+    delay(200); 
+    drift::ekfGetOrientation(initial_yaw);
+    Serial.println("[NODE 1] EKF Initialized.");
+    drift::ekfReset(); 
 
+    // Synchronize the clocks before starting the loop
+    uint32_t start_time = millis();
+    lastImuMs   = start_time;
+    lastCamMs   = start_time;
+    lastPrintMs = start_time;
     
     Serial.println("[NODE 1] Setup complete.");
 }
@@ -108,8 +112,6 @@ void setup() {
 void loop() {
     uint32_t now = millis();
 
-
-    
 
     // ── IMU read ─────────────────────────────────────────────────────────
     if (now - lastImuMs >= IMU_PERIOD_MS) {
