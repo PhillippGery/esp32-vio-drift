@@ -49,7 +49,8 @@ static uint32_t lastPrintMs = 0;
 MPU6050 imu;
 
 
-constexpr bool VISION_ENABLED = false;
+constexpr bool VISION_ENABLED = true; 
+float initial_yaw = 0.0f;
 
 // ─────────────────────────────────────────────────────────────────────────
 void setup() {
@@ -72,6 +73,8 @@ void setup() {
     // TODO (Phillipp): EKF init
     // Initialize Kalman Filter Matrices
     drift::ekfInit();
+    delay(100); 
+    drift::ekfGetOrientation(initial_yaw);
     Serial.println("[NODE 1] EKF Initialized.");
 
 
@@ -128,18 +131,22 @@ void loop() {
     }
 
 
-    // // ── Camera capture ───────────────────────────────────────────────────
-    // if (now - lastCamMs >= CAM_PERIOD_MS) {
-    //     lastCamMs = now;
-    //     // TODO (Panchtio): captureFrame() → feature extraction → EKF update
+    // ── Camera capture ───────────────────────────────────────────────────
+    if (VISION_ENABLED && now - lastCamMs >= CAM_PERIOD_MS) {
+        lastCamMs = now;
+        // TODO (Panchtio): captureFrame() → feature extraction → EKF update
 
-    //     float dx, dy, confidence;
-    //     // If the optical flow accumulator finishes a window:
-    //     if (drift::cameraProcessFrame(dx, dy, confidence)) {
-    //         // EKF UPDATE: Feed the visual displacement to the math engine!
-    //         printf("[NODE 1] EKF updated with camera measurement: dx=%.3f m, dy=%.3f m, confidence=%.2f\n", dx, dy, confidence);
-    //     }
-    // }
+        float dx, dy, confidence;
+        // If the optical flow accumulator finishes a window:
+        // if (drift::cameraProcessFrame(dx, dy, confidence)) {
+        //     // EKF UPDATE: Feed the visual displacement to the math engine!
+        //     printf("[NODE 1] EKF updated with camera measurement: dx=%.3f m, dy=%.3f m, confidence=%.2f\n", dx, dy, confidence);
+        // }
+
+
+        // Klaman update with dummy camera data (static test)
+        drift::ekfUpdateCamera(0.0f, 0.0f, initial_yaw, 0.95f);
+    }
 
     // ── Debug triggers (Catch 'c' commands from Python) ──────────────────
     //drift::cameraDebugCheck();

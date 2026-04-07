@@ -21,13 +21,13 @@ void ekfInit();
 void ekfPredict(float ax, float ay, float gz, float dt);
 
 /**
- * @brief Update step: Anchors the physics engine using the forward-facing camera.
- * @param delta_yaw_cam The absolute yaw change calculated by the Essential Matrix.
- * @param t_x The X component of the normalized translation unit vector.
- * @param t_y The Y component of the normalized translation unit vector.
- * @param confidence Reliability metric to dynamically scale the Measurement Noise (R).
+ * @brief Update step: Anchors the physics engine using camera data.
+ * @param meas_vx The measured X velocity (m/s). 0.0 for static test.
+ * @param meas_vy The measured Y velocity (m/s). 0.0 for static test.
+ * @param meas_yaw The absolute measured yaw (radians).
+ * @param confidence Reliability metric (0.0 to 1.0). High value = trust camera.
  */
-void ekfUpdateCamera(float delta_yaw_cam, float t_x, float t_y, float confidence);
+void ekfUpdateCamera(float meas_vx, float meas_vy, float meas_yaw, float confidence);
 
 /**
  * @brief Retrieves the current 2D position estimate for telemetry.

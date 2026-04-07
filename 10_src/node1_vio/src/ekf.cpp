@@ -88,18 +88,59 @@ void ekfPredict(float ax, float ay, float gz, float dt) {
     P = F_mat * P * (~F_mat) + Q;
 }
 
-// Prepped for the forward-facing Essential Matrix decomposition output
-void ekfUpdateCamera(float delta_yaw_cam, float t_x, float t_y, float confidence) {
-    // TODO: Kalman Gain (K) math.
-    // 1. Calculate measurement residual (y = z - Hx)
-    // 2. Calculate measurement covariance (S = H * P * H^T + R)
-    // 3. Calculate Kalman Gain (K = P * H^T * S^-1)
-    // 4. Update State (x = x + K * y)
-    // 5. Update Covariance (P = (I - K * H) * P)
+void ekfUpdateCamera(float meas_vx, float meas_vy, float meas_yaw, float confidence) {
+    // Define Measurement Vector (z)
+    Matrix<3, 1> z = {meas_vx, meas_vy, meas_yaw};
+
+    // Define Observation Matrix (H)
+    // We are observing vx (index 2), vy (index 3), and yaw (index 4)
+    Matrix<3, STATE_DIM> H = {
+        0.0f, 0.0f, 1.0f, 0.0f, 0.0f, 0.0f,
+        0.0f, 0.0f, 0.0f, 1.0f, 0.0f, 0.0f,
+        0.0f, 0.0f, 0.0f, 0.0f, 1.0f, 0.0f
+    };
+
+    // Define Measurement Noise Covariance (R)
+    // High confidence = tiny noise = massive Kalman Gain.
+    float base_noise = 0.001f;
+    float scaled_noise = base_noise / (confidence + 0.00001f); // Avoid divide by zero
     
-    // NOTE: t_x and t_y are a unit vector. You will fuse this with 
-    // the direction of x(2) and x(3) to correct the trajectory, 
-    // while keeping the magnitude from the IMU integration.
+    Matrix<3, 3> R = {
+        scaled_noise, 0.0f, 0.0f,
+        0.0f, scaled_noise, 0.0f,
+        0.0f, 0.0f, scaled_noise
+    };
+
+    // Calculate Innovation (y = z - Hx)
+    Matrix<3, 1> y = z - H * x;
+
+    // Normalize the yaw error so the robot doesn't do a 360-degree spin to correct 1 degree
+    while (y(2) > PI) y(2) -= 2.0f * PI;
+    while (y(2) < -PI) y(2) += 2.0f * PI;
+
+    // Calculate Innovation Covariance (S = H * P * H^T + R)
+    Matrix<3, 3> S = H * P * (~H) + R;
+
+    // Calculate Kalman Gain (K = P * H^T * S^-1)
+    Matrix<3, 3> S_inv;
+    bool is_nonsingular = Invert(S, S_inv);
+    if (!is_nonsingular) {
+        return; // Matrix singular, skip update to prevent hard fault
+    }
+    
+    Matrix<STATE_DIM, 3> K = P * (~H) * S_inv;
+
+    // Apply the Correction to the State (x = x + Ky)
+    x += K * y;
+
+    // Reduce the Uncertainty (P = (I - KH) * P)
+    Matrix<STATE_DIM, STATE_DIM> I;
+    I.Fill(0.0f);
+    for(int i = 0; i < STATE_DIM; i++) {
+        I(i, i) = 1.0f;
+    }
+
+    P = (I - K * H) * P;
 }
 
 void ekfGetPosition(float &px, float &py) {
