@@ -4,14 +4,14 @@
 
 using namespace BLA;
 
-// ─── Core EKF Matrices ───────────────────────────────────────────────────
-// State: [px, py, pz, vx, vy, vz, roll, pitch, yaw, bx, by, bz]^T
+// ─── Core EKF Matrices (6-DOF Planar) ────────────────────────────────────
+// State: [px, py, vx, vy, yaw, bgz]^T
 static Matrix<drift::STATE_DIM, 1> x;
 
-// State Covariance
+// State Covariance (Uncertainty)
 static Matrix<drift::STATE_DIM, drift::STATE_DIM> P;
 
-// Process Noise Covariance
+// Process Noise Covariance (How much we drift per step)
 static Matrix<drift::STATE_DIM, drift::STATE_DIM> Q;
 
 namespace drift {
@@ -21,97 +21,94 @@ void ekfInit() {
     x.Fill(0.0f);
 
     // 2. Initialize Covariance Matrix (P)
-    // We start with some uncertainty. 
-    // Diagonal matrix: independent variance for each state variable.
     P.Fill(0.0f);
     for (int i = 0; i < STATE_DIM; i++) {
-        P(i, i) = 1.0f; // Start with 1.0 variance (tune this later)
+        P(i, i) = 1.0f; // Start with baseline uncertainty
     }
 
     // 3. Initialize Process Noise (Q)
-    // This dictates how much drift we expect per time step.
     Q.Fill(0.0f);
-    for (int i = 0; i < STATE_DIM; i++) {
-        Q(i, i) = 0.01f; // Small noise base value (tune this later)
-    }
+    // Tune these values based on your specific MPU-6050's noise characteristics
+    Q(0, 0) = 0.001f; // px noise
+    Q(1, 1) = 0.001f; // py noise
+    Q(2, 2) = 0.01f;  // vx noise
+    Q(3, 3) = 0.01f;  // vy noise
+    Q(4, 4) = 0.005f; // yaw noise
+    Q(5, 5) = 0.0001f; // gyro bias noise (changes very slowly)
 }
 
-void ekfPredict(float ax, float ay, float az, float gx, float gy, float gz, float dt) {
-    // 1. Extract current state variables for readability
-    float roll = x(6), pitch = x(7), yaw = x(8);
-    float bx = x(9), by = x(10), bz = x(11);
+void ekfPredict(float ax, float ay, float gz, float dt) {
+    // 1. Extract current state variables
+    float px = x(0), py = x(1);
+    float vx = x(2), vy = x(3);
+    float yaw = x(4), bgz = x(5);
 
     // 2. Correct raw gyro data using our current bias estimate
-    float wx = gx - bx;
-    float wy = gy - by;
-    float wz = gz - bz;
+    float wz = gz - bgz;
+    float yaw_new = yaw + wz * dt;
 
-    // 3. Update Orientation (Euler Integration)
-    roll  += wx * dt;
-    pitch += wy * dt;
-    yaw   += wz * dt;
+    // 3. Trigonometry for the 2D Rotation Matrix
+    float c = cos(yaw);
+    float s = sin(yaw);
 
-    // 4. Build the Rotation Matrix (Body Frame -> Global Frame)
-    // This requires calculating the sines and cosines of our new orientation
-    float cr = cos(roll), sr = sin(roll);
-    float cp = cos(pitch), sp = sin(pitch);
-    float cy = cos(yaw), sy = sin(yaw);
+    // 4. Rotate Acceleration to Global Frame
+    // WARNING: ax and ay MUST have the static calibration offset removed before arriving here!
+    float a_global_x = ax * c - ay * s;
+    float a_global_y = ax * s + ay * c;
 
-    Matrix<3, 3> R = {
-        cp*cy,  sr*sp*cy - cr*sy,  cr*sp*cy + sr*sy,
-        cp*sy,  sr*sp*sy + cr*cy,  cr*sp*sy - sr*cy,
-        -sp,    sr*cp,             cr*cp
-    };
+    // 5. Update State Vector (x)
+    x(0) = px + vx * dt;                 // p_x
+    x(1) = py + vy * dt;                 // p_y
+    x(2) = vx + a_global_x * dt;         // v_x
+    x(3) = vy + a_global_y * dt;         // v_y
+    x(4) = yaw_new;                      // yaw
+    x(5) = bgz;                          // bias stays constant in predict
 
-    // 5. Rotate Acceleration and Subtract Gravity
-    Matrix<3, 1> a_meas = {ax, ay, az};
-    Matrix<3, 1> a_global = R * a_meas;
-    Matrix<3, 1> gravity = {0.0f, 0.0f, 9.81f}; // Standard gravity in m/s^2
-    Matrix<3, 1> a_true = a_global - gravity;
-
-    // 6. Update Position (p = p + v*dt)
-    x(0) += x(3) * dt;
-    x(1) += x(4) * dt;
-    x(2) += x(5) * dt;
-
-    // 7. Update Velocity (v = v + a*dt)
-    x(3) += a_true(0) * dt;
-    x(4) += a_true(1) * dt;
-    x(5) += a_true(2) * dt;
-
-    // 8. Save updated orientation back to the state vector
-    x(6) = roll; 
-    x(7) = pitch; 
-    x(8) = yaw;
-
-    // 9. UPDATE UNCERTAINTY (Covariance P)
-    // The equation is: P = F * P * F^T + Q
-    // We need the Jacobian matrix (F) of the state transition equations above.
-    
+    // 6. Build the Jacobian Matrix (F_mat)
     Matrix<STATE_DIM, STATE_DIM> F_mat;
     F_mat.Fill(0.0f);
+    
+    // Set diagonal to 1.0
     for(int i = 0; i < STATE_DIM; i++) {
-        F_mat(i, i) = 1.0f; // TODO: Placeholder! 
+        F_mat(i, i) = 1.0f;
     }
 
-    // ~F_mat is the transpose operator in the BLA library
+    // The Non-Linear Partial Derivatives
+    F_mat(0, 2) = dt; // d(p_x) / d(v_x)
+    F_mat(1, 3) = dt; // d(p_y) / d(v_y)
+    
+    // How yaw orientation affects global velocity integration
+    F_mat(2, 4) = (-ax * s - ay * c) * dt; // d(v_x) / d(yaw)
+    F_mat(3, 4) = (ax * c - ay * s) * dt;  // d(v_y) / d(yaw)
+    
+    // How gyro bias affects the yaw estimate
+    F_mat(4, 5) = -dt; // d(yaw) / d(bgz)
+
+    // 7. Update the Covariance Matrix (P = F * P * F^T + Q)
     P = F_mat * P * (~F_mat) + Q;
 }
 
-void ekfUpdateCamera(float du, float dv) {
-    // Visual odometry update math goes here.
+// Prepped for the forward-facing Essential Matrix decomposition output
+void ekfUpdateCamera(float delta_yaw_cam, float t_x, float t_y, float confidence) {
+    // TODO: Kalman Gain (K) math.
+    // 1. Calculate measurement residual (y = z - Hx)
+    // 2. Calculate measurement covariance (S = H * P * H^T + R)
+    // 3. Calculate Kalman Gain (K = P * H^T * S^-1)
+    // 4. Update State (x = x + K * y)
+    // 5. Update Covariance (P = (I - K * H) * P)
+    
+    // NOTE: t_x and t_y are a unit vector. You will fuse this with 
+    // the direction of x(2) and x(3) to correct the trajectory, 
+    // while keeping the magnitude from the IMU integration.
 }
 
-void ekfGetPosition(float &px, float &py, float &pz) {
+void ekfGetPosition(float &px, float &py) {
     px = x(0);
     py = x(1);
-    pz = x(2);
 }
 
-void ekfGetOrientation(float &roll, float &pitch, float &yaw) {
-    roll  = x(6);
-    pitch = x(7);
-    yaw   = x(8);
+void ekfGetOrientation(float &yaw) {
+    yaw = x(4);
 }
 
 } // namespace drift

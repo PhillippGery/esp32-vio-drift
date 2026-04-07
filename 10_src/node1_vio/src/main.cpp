@@ -39,14 +39,17 @@
 constexpr uint32_t IMU_PERIOD_MS   = 5;   // 200 Hz
 constexpr uint32_t TX_PERIOD_MS    = 20;  // 50 Hz
 constexpr uint32_t CAM_PERIOD_MS   = 200; // 5 Hz (placeholder)
+constexpr uint32_t PRINT_PERIOD_MS = 200; // 5 Hz telemetry print
 
 // ── Timing trackers ───────────────────────────────────────────────────────
 static uint32_t lastImuMs  = 0;
 static uint32_t lastTxMs   = 0;
 static uint32_t lastCamMs  = 0;
-
+static uint32_t lastPrintMs = 0;
 MPU6050 imu;
 
+
+constexpr bool VISION_ENABLED = false;
 
 // ─────────────────────────────────────────────────────────────────────────
 void setup() {
@@ -69,22 +72,26 @@ void setup() {
     // TODO (Phillipp): EKF init
     // Initialize Kalman Filter Matrices
     drift::ekfInit();
+    Serial.println("[NODE 1] EKF Initialized.");
 
 
-
-    // TODO (Panchtio): ArduCAM init + test JPEG capture
-    // Initialize XIAO OV3660 Camera Pipeline & PSRAM
-    if (drift::cameraInit()) {
-        Serial.println("[NODE 1] Camera initialized successfully.");
+    if (VISION_ENABLED) {
+        // TODO (Panchtio): ArduCAM init + test JPEG capture
+        // Initialize XIAO OV3660 Camera Pipeline & PSRAM
+        if (drift::cameraInit()) {
+            Serial.println("[NODE 1] Camera initialized successfully.");
+        } else {
+            Serial.println("[NODE 1] CRITICAL: Camera init failed! Halting.");
+            while (true) { delay(1000); }
+        }
     } else {
-        Serial.println("[NODE 1] CRITICAL: Camera init failed! Halting.");
-        while (true) { delay(1000); }
+        Serial.println("[NODE 1] Camera disabled. Running IMU-only EKF.");
     }
 
     // TODO (Sam):    WiFi + UDP socket init
 
 
-    // drift::ekfInit();
+    drift::ekfInit();
     // drift::ledInit();
     // drift::ledSet(drift::StatusColor::RED);
 
@@ -103,35 +110,58 @@ void loop() {
 
     // ── IMU read ─────────────────────────────────────────────────────────
     if (now - lastImuMs >= IMU_PERIOD_MS) {
+        float dt = (now - lastImuMs) / 1000.0f; // dt in seconds
         lastImuMs = now;
-        // TODO (Phillipp): readIMU() → EKF predict step
+
         float ax, ay, az, gx, gy, gz;
-        imu.read(ax, ay, az, gx, gy, gz);
-        //Serial.printf("A: %.3f  %.3f  %.3f  |  G: %.3f  %.3f  %.3f\n", x, ay, az, gx, gy, gz);
-        delay(20);
         
-    }
-
-    // ── Camera capture ───────────────────────────────────────────────────
-    if (now - lastCamMs >= CAM_PERIOD_MS) {
-        lastCamMs = now;
-        // TODO (Panchtio): captureFrame() → feature extraction → EKF update
-
-        float dx, dy, confidence;
-        // If the optical flow accumulator finishes a window:
-        if (drift::cameraProcessFrame(dx, dy, confidence)) {
-            // EKF UPDATE: Feed the visual displacement to the math engine!
-            drift::ekfUpdateCamera(dx, dy); 
-            printf("[NODE 1] EKF updated with camera measurement: dx=%.3f m, dy=%.3f m, confidence=%.2f\n", dx, dy, confidence);
+        // read() automatically applies the static calibration offsets!
+        if (imu.read(ax, ay, az, gx, gy, gz)) {
+            //Serial.printf("[NODE 1] IMU read: ax=%.3f ay=%.3f az=%.3f gx=%.3f gy=%.3f gz=%.3f\n", ax, ay, az, gx, gy, gz);
+            
+            // CRITICAL: Convert gyroscope Z from degrees/s to radians/s
+            float gz_rad = gz * (PI / 180.0f);
+            
+            // Drive the physics engine forward
+            drift::ekfPredict(ax, ay, gz_rad, dt);
         }
     }
 
+
+    // // ── Camera capture ───────────────────────────────────────────────────
+    // if (now - lastCamMs >= CAM_PERIOD_MS) {
+    //     lastCamMs = now;
+    //     // TODO (Panchtio): captureFrame() → feature extraction → EKF update
+
+    //     float dx, dy, confidence;
+    //     // If the optical flow accumulator finishes a window:
+    //     if (drift::cameraProcessFrame(dx, dy, confidence)) {
+    //         // EKF UPDATE: Feed the visual displacement to the math engine!
+    //         printf("[NODE 1] EKF updated with camera measurement: dx=%.3f m, dy=%.3f m, confidence=%.2f\n", dx, dy, confidence);
+    //     }
+    // }
+
     // ── Debug triggers (Catch 'c' commands from Python) ──────────────────
-    drift::cameraDebugCheck();
+    //drift::cameraDebugCheck();
 
     // ── Telemetry transmit ───────────────────────────────────────────────
     if (now - lastTxMs >= TX_PERIOD_MS) {
         lastTxMs = now;
         // TODO (Sam): serialize EKF state to JSON → UDP send
+    }
+
+    // ── 3. DEBUG EKF (5 Hz) ────────────────────────────────────────
+    if (now - lastPrintMs >= PRINT_PERIOD_MS) {
+        lastPrintMs = now;
+        
+        float px, py, yaw;
+        drift::ekfGetPosition(px, py);
+        drift::ekfGetOrientation(yaw);
+
+        // Convert yaw back to degrees for easier 
+        float yaw_deg = yaw * (180.0f / PI);
+
+        // Print the EKF State
+        Serial.printf("[EKF] X: %8.3f m | Y: %8.3f m | Yaw: %8.3f deg\n", px, py, yaw_deg);
     }
 }
