@@ -59,6 +59,9 @@ void setup() {
 
     Serial.printf("[NODE %d] PROJECT DRIFT — VIO Node booting...\n", NODE_ID);
 
+    // init status LED
+    drift::ledInit();
+
     // Initialize I2C for the MPU-6050
     Wire.begin(IMU_I2C_SDA, IMU_I2C_SCL);
     imu.begin(); // Default I2C address 0x68, can be changed if needed
@@ -104,6 +107,7 @@ void setup() {
     lastPrintMs = start_time;
     
     Serial.println("[NODE 1] Setup complete.");
+    drift::ledSet(true);
 }
 
 // ------------------------------------------------------------
@@ -147,7 +151,7 @@ void loop() {
 
 
         // Klaman update with dummy camera data (static test)
-        drift::ekfUpdateCamera(0.0f, 0.0f, initial_yaw, 0.95f);
+        drift::ekfUpdateCamera(0.00f, 0.00f, initial_yaw, 0.95f);
     }
 
     // ── Debug triggers (Catch 'c' commands from Python) ──────────────────
