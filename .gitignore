@@ -117,3 +117,5 @@ $RECYCLE.BIN/
 # -----------------------------------------------------------------------------
 *.log
 serial_capture_*.txt
+platformio.ini
+.vscode/extensions.json
