@@ -12,7 +12,6 @@
 
 #include <Arduino.h>
 #include <Wire.h>
-#include <ArduinoJson.h>
 #include "MPU6050.h"
 #include "dead_reckoning.h"
 #include "status_led.h"
@@ -36,7 +35,13 @@ static uint32_t lastTxMs  = 0;
 
 MPU6050 imu;
 static drift::DeadReckoner tracker;
-static WiFiUDP udp;
+static float latestAx = 0.0f;
+static float latestAy = 0.0f;
+static float latestAz = 0.0f;
+static float latestGx = 0.0f;
+static float latestGy = 0.0f;
+static float latestGz = 0.0f;
+
 void setup() {
     Serial.begin(115200);
     Wire.begin(IMU_I2C_SDA, IMU_I2C_SCL);
@@ -44,13 +49,11 @@ void setup() {
 
     drift::ledInit();
     drift::ledSet(drift::StatusColor::RED);
-    
-    if (!startWiFi()) {
+
+    if (!drift::transportInit()) {
         Serial.println("[NODE 2] CRITICAL: WiFi init failed! Halting.");
         while (true) { delay(1000); }
     }
-    udp.begin(UDP_LOCAL_PORT);
-    Serial.printf("[NODE %d] UDP transport ready (remote %s:%u)\n", NODE_ID, UDP_TARGET_IP, UDP_TARGET_PORT);
 
     Serial.println("Calibrating — keep sensor still...");
     imu.calibrate();
@@ -62,9 +65,6 @@ void setup() {
 
 void loop() {
     uint32_t now = millis();
-
-
-
 
     if (now - lastImuMs >= IMU_PERIOD_MS) {
         uint32_t dt_ms = lastImuMs == 0 ? IMU_PERIOD_MS : (now - lastImuMs);
@@ -88,18 +88,14 @@ void loop() {
     static uint32_t lastPrintMs = 0;
     if (now - lastPrintMs >= 500) {
         lastPrintMs = now;
-        
-        // 5. Get the total delta movement
-        float total_drift = tracker.getDeltaMovement();
-        
-        Serial.printf("Pos: X:%.3f Y:%.3f | Total Delta: %.3f meters\n | Yaw: %.3f rad", tracker.px, tracker.py, total_drift, tracker.yaw);
-    }
 
+        float total_drift = tracker.getDeltaMovement();
+        Serial.printf("Pos: X:%.3f Y:%.3f | Total Delta: %.3f meters | Yaw: %.3f rad\n",
+                      tracker.px, tracker.py, total_drift, tracker.yaw);
+    }
 
     if (now - lastTxMs >= TX_PERIOD_MS) {
         lastTxMs = now;
-        sendImuPacket(now);
-    }drift::transportInit()) {
-        Serial.println("[NODE 2] CRITICAL: WiFi init failed! Halting.");
-        while (true) { delay(1000); }
-    }drift::sendImuPacket(now, latestAx, latestAy, latestAz, latestGx, latestGy, latestGz
+        drift::sendImuPacket(now, latestAx, latestAy, latestAz, latestGx, latestGy, latestGz);
+    }
+}

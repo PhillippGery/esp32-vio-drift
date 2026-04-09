@@ -16,11 +16,10 @@
 #include <Arduino.h>
 #include <Wire.h>
 #include <SPI.h>
-#include <ArduinoJson.h>
 #include "ekf.h"
 #include "status_led.h"
 #include "vio_camera.h"
-#include "mpu6050.h"
+#include "MPU6050.h"
 #include "transport.h"
 
 // TODO (Panchtio): include ArduCAM headers
@@ -72,8 +71,6 @@ void setup() {
 
 
 
-    // TODO (Panchtio): ArduCAM init + test JPEG capture
-    // Initialize XIAO OV3660 Camera Pipeline & PSRAM
     if (drift::cameraInit()) {
         Serial.println("[NODE 1] Camera initialized successfully.");
     } else {
@@ -81,12 +78,10 @@ void setup() {
         while (true) { delay(1000); }
     }
 
-    if (!startWiFi()) {
+    if (!drift::transportInit()) {
         Serial.println("[NODE 1] CRITICAL: WiFi init failed! Halting.");
         while (true) { delay(1000); }
     }
-    udp.begin(UDP_LOCAL_PORT);
-    Serial.printf("[NODE %d] UDP transport ready (remote %s:%u)\n", NODE_ID, UDP_TARGET_IP, UDP_TARGET_PORT);
 
 
     // drift::ekfInit();
@@ -133,10 +128,11 @@ void loop() {
 
     // ── Debug triggers (Catch 'c' commands from Python) ──────────────────
     drift::cameraDebugCheck();
-drift::transportInit()) {
-        Serial.println("[NODE 1] CRITICAL: WiFi init failed! Halting.");
-        while (true) { delay(1000); }
+
+    // ── Telemetry TX ────────────────────────────────────────────────────────
+    if (now - lastTxMs >= TX_PERIOD_MS) {
+        lastTxMs = now;
+        drift::sendOdometryPacket();
     }
-    }drift::
 }
 

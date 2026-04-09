@@ -11,8 +11,7 @@
 
 #include <Arduino.h>
 #include <Wire.h>
-#include <ArduinoJson.h>
-#include <MPU6050.h>
+#include "MPU6050.h"
 #include "transport.h"
 
 #ifndef NODE_ID
@@ -32,59 +31,12 @@ static uint32_t lastImuMs = 0;
 static uint32_t lastTxMs  = 0;
 
 MPU6050 imu;
-static WiFiUDP udp;
 static float latestAx = 0.0f;
 static float latestAy = 0.0f;
 static float latestAz = 0.0f;
 static float latestGx = 0.0f;
 static float latestGy = 0.0f;
 static float latestGz = 0.0f;
-
-static const char* WIFI_SSID = "YOUR_WIFI_SSID";
-static const char* WIFI_PASSWORD = "YOUR_WIFI_PASSWORD";
-static const char* UDP_TARGET_IP = "255.255.255.255";
-constexpr uint16_t UDP_TARGET_PORT = 4210;
-constexpr uint16_t UDP_LOCAL_PORT = 4213;
-
-static bool startWiFi() {
-    Serial.printf("[NODE %d] Connecting to WiFi SSID='%s'...\n", NODE_ID, WIFI_SSID);
-    WiFi.mode(WIFI_STA);
-    WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
-
-    const uint32_t timeout_ms = 15000;
-    uint32_t start_ms = millis();
-    while (WiFi.status() != WL_CONNECTED && millis() - start_ms < timeout_ms) {
-        delay(250);
-        Serial.print(".");
-    }
-    Serial.println();
-
-    if (WiFi.status() != WL_CONNECTED) {
-        Serial.printf("[NODE %d] WiFi connect failed.\n", NODE_ID);
-        return false;
-    }
-
-    Serial.printf("[NODE %d] WiFi connected, IP=%s\n", NODE_ID, WiFi.localIP().toString().c_str());
-    return true;
-}
-
-static void sendImuPacket(uint32_t timestamp_ms) {
-    StaticJsonDocument<192> packet;
-    packet["node"] = NODE_ID;
-    packet["ts"] = timestamp_ms;
-    packet["ax"] = latestAx;
-    packet["ay"] = latestAy;
-    packet["az"] = latestAz;
-    packet["gx"] = latestGx;
-    packet["gy"] = latestGy;
-    packet["gz"] = latestGz;
-
-    char buffer[256];
-    size_t len = serializeJson(packet, buffer, sizeof(buffer));
-    udp.beginPacket(UDP_TARGET_IP, UDP_TARGET_PORT);
-    udp.write(reinterpret_cast<const uint8_t*>(buffer), len);
-    udp.endPacket();
-}
 
 void setup() {
     Serial.begin(115200);
@@ -106,7 +58,6 @@ void setup() {
     Serial.printf("Offsets ax:%.4f ay:%.4f az:%.4f\n", imu.offsetAx, imu.offsetAy, imu.offsetAz);
     Serial.printf("[NODE %d] Setup complete.\n", NODE_ID);
 }
-
 
 void loop() {
     uint32_t now = millis();
