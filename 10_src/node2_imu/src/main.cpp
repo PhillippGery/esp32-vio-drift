@@ -12,12 +12,11 @@
 
 #include <Arduino.h>
 #include <Wire.h>
-#include <WiFi.h>
-#include <WiFiUdp.h>
 #include <ArduinoJson.h>
 #include "MPU6050.h"
 #include "dead_reckoning.h"
 #include "status_led.h"
+#include "transport.h"
 
 #ifndef NODE_ID
 #define NODE_ID 2
@@ -38,60 +37,6 @@ static uint32_t lastTxMs  = 0;
 MPU6050 imu;
 static drift::DeadReckoner tracker;
 static WiFiUDP udp;
-
-static float latestAx = 0.0f;
-static float latestAy = 0.0f;
-static float latestAz = 0.0f;
-static float latestGx = 0.0f;
-static float latestGy = 0.0f;
-static float latestGz = 0.0f;
-
-static const char* WIFI_SSID = "YOUR_WIFI_SSID";
-static const char* WIFI_PASSWORD = "YOUR_WIFI_PASSWORD";
-static const char* UDP_TARGET_IP = "255.255.255.255";
-constexpr uint16_t UDP_TARGET_PORT = 4210;
-constexpr uint16_t UDP_LOCAL_PORT = 4212;
-
-static bool startWiFi() {
-    Serial.printf("[NODE %d] Connecting to WiFi SSID='%s'...\n", NODE_ID, WIFI_SSID);
-    WiFi.mode(WIFI_STA);
-    WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
-
-    const uint32_t timeout_ms = 15000;
-    uint32_t start_ms = millis();
-    while (WiFi.status() != WL_CONNECTED && millis() - start_ms < timeout_ms) {
-        delay(250);
-        Serial.print(".");
-    }
-    Serial.println();
-
-    if (WiFi.status() != WL_CONNECTED) {
-        Serial.println("[NODE 2] WiFi connect failed.");
-        return false;
-    }
-
-    Serial.printf("[NODE %d] WiFi connected, IP=%s\n", NODE_ID, WiFi.localIP().toString().c_str());
-    return true;
-}
-
-static void sendImuPacket(uint32_t timestamp_ms) {
-    StaticJsonDocument<192> packet;
-    packet["node"] = NODE_ID;
-    packet["ts"] = timestamp_ms;
-    packet["ax"] = latestAx;
-    packet["ay"] = latestAy;
-    packet["az"] = latestAz;
-    packet["gx"] = latestGx;
-    packet["gy"] = latestGy;
-    packet["gz"] = latestGz;
-
-    char buffer[256];
-    size_t len = serializeJson(packet, buffer, sizeof(buffer));
-    udp.beginPacket(UDP_TARGET_IP, UDP_TARGET_PORT);
-    udp.write(reinterpret_cast<const uint8_t*>(buffer), len);
-    udp.endPacket();
-}
-
 void setup() {
     Serial.begin(115200);
     Wire.begin(IMU_I2C_SDA, IMU_I2C_SCL);
@@ -154,5 +99,7 @@ void loop() {
     if (now - lastTxMs >= TX_PERIOD_MS) {
         lastTxMs = now;
         sendImuPacket(now);
-    }
-}
+    }drift::transportInit()) {
+        Serial.println("[NODE 2] CRITICAL: WiFi init failed! Halting.");
+        while (true) { delay(1000); }
+    }drift::sendImuPacket(now, latestAx, latestAy, latestAz, latestGx, latestGy, latestGz

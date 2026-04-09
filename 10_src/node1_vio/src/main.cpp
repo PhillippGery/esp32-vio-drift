@@ -16,13 +16,12 @@
 #include <Arduino.h>
 #include <Wire.h>
 #include <SPI.h>
-#include <WiFi.h>
-#include <WiFiUdp.h>
 #include <ArduinoJson.h>
 #include "ekf.h"
 #include "status_led.h"
 #include "vio_camera.h"
 #include "mpu6050.h"
+#include "transport.h"
 
 // TODO (Panchtio): include ArduCAM headers
 // TODO (Phillipp): include EKF header from include/ekf.h
@@ -48,58 +47,6 @@ static uint32_t lastTxMs   = 0;
 static uint32_t lastCamMs  = 0;
 
 MPU6050 imu;
-
-static const char* WIFI_SSID = "YOUR_WIFI_SSID";
-static const char* WIFI_PASSWORD = "YOUR_WIFI_PASSWORD";
-static const char* UDP_TARGET_IP = "255.255.255.255";
-constexpr uint16_t UDP_TARGET_PORT = 4210;
-constexpr uint16_t UDP_LOCAL_PORT = 4211;
-
-static WiFiUDP udp;
-
-static bool startWiFi() {
-    Serial.printf("[NODE %d] Connecting to WiFi SSID='%s'...\n", NODE_ID, WIFI_SSID);
-    WiFi.mode(WIFI_STA);
-    WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
-
-    const uint32_t timeout_ms = 15000;
-    uint32_t start_ms = millis();
-    while (WiFi.status() != WL_CONNECTED && millis() - start_ms < timeout_ms) {
-        delay(250);
-        Serial.print(".");
-    }
-    Serial.println();
-
-    if (WiFi.status() != WL_CONNECTED) {
-        Serial.println("[NODE 1] WiFi connect failed.");
-        return false;
-    }
-
-    Serial.printf("[NODE %d] WiFi connected, IP=%s\n", NODE_ID, WiFi.localIP().toString().c_str());
-    return true;
-}
-
-static void sendOdometryPacket(uint32_t timestamp_ms) {
-    float px, py, pz, roll, pitch, yaw;
-    drift::ekfGetPosition(px, py, pz);
-    drift::ekfGetOrientation(roll, pitch, yaw);
-
-    StaticJsonDocument<256> packet;
-    packet["node"] = NODE_ID;
-    packet["ts"] = timestamp_ms;
-    packet["px"] = px;
-    packet["py"] = py;
-    packet["pz"] = pz;
-    packet["roll"] = roll;
-    packet["pitch"] = pitch;
-    packet["yaw"] = yaw;
-
-    char buffer[256];
-    size_t len = serializeJson(packet, buffer, sizeof(buffer));
-    udp.beginPacket(UDP_TARGET_IP, UDP_TARGET_PORT);
-    udp.write(reinterpret_cast<const uint8_t*>(buffer), len);
-    udp.endPacket();
-}
 
 // ─────────────────────────────────────────────────────────────────────────
 void setup() {
@@ -186,12 +133,10 @@ void loop() {
 
     // ── Debug triggers (Catch 'c' commands from Python) ──────────────────
     drift::cameraDebugCheck();
-
-    // ── Telemetry transmit ───────────────────────────────────────────────
-    if (now - lastTxMs >= TX_PERIOD_MS) {
-        lastTxMs = now;
-        sendOdometryPacket(now);
-        Serial.printf("[NODE %d] Sent odometry packet at %u ms\n", NODE_ID, now);
+drift::transportInit()) {
+        Serial.println("[NODE 1] CRITICAL: WiFi init failed! Halting.");
+        while (true) { delay(1000); }
     }
+    }drift::
 }
 

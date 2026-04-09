@@ -11,10 +11,9 @@
 
 #include <Arduino.h>
 #include <Wire.h>
-#include <WiFi.h>
-#include <WiFiUdp.h>
 #include <ArduinoJson.h>
 #include <MPU6050.h>
+#include "transport.h"
 
 #ifndef NODE_ID
 #error "NODE_ID must be defined via platformio.ini build_flags (-DNODE_ID=3)"
@@ -96,12 +95,10 @@ void setup() {
     Wire.begin(IMU_I2C_SDA, IMU_I2C_SCL);
     imu.begin();
 
-    if (!startWiFi()) {
+    if (!drift::transportInit()) {
         Serial.printf("[NODE %d] CRITICAL: WiFi init failed! Halting.\n", NODE_ID);
         while (true) { delay(1000); }
     }
-    udp.begin(UDP_LOCAL_PORT);
-    Serial.printf("[NODE %d] UDP transport ready (remote %s:%u)\n", NODE_ID, UDP_TARGET_IP, UDP_TARGET_PORT);
 
     Serial.println("Calibrating — keep sensor still...");
     imu.calibrate();
@@ -129,6 +126,6 @@ void loop() {
 
     if (now - lastTxMs >= TX_PERIOD_MS) {
         lastTxMs = now;
-        sendImuPacket(now);
+        drift::sendImuPacket(now, latestAx, latestAy, latestAz, latestGx, latestGy, latestGz);
     }
 }
