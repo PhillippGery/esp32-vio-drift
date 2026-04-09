@@ -132,7 +132,7 @@ void loop() {
     // ── Telemetry TX ────────────────────────────────────────────────────────
     if (now - lastTxMs >= TX_PERIOD_MS) {
         lastTxMs = now;
-        drift::sendOdometryPacket();
+        drift::sendOdometryPacket(now);
     }
 }
 
