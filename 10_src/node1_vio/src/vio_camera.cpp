@@ -23,6 +23,7 @@
 #include "fast_corner.h"
 #include "optical_flow.h"
 #include "flow_accumulator.h"
+#include "vio_processor.h"
 
 namespace drift {
 
@@ -256,7 +257,7 @@ bool cameraInit() {
     return true;
 }
 
-bool cameraProcessFrame(float &dx, float &dy, float &confidence) {
+bool cameraProcessFrame(float &vx, float &vy, float &confidence, float dt) {
     if (test_mode) return false;
 
     camera_fb_t *fb = capture_frame();
@@ -270,33 +271,28 @@ bool cameraProcessFrame(float &dx, float &dy, float &confidence) {
 
     if (has_prev_frame && prev_n_corners > 0) {
         FlowVector flow[MAX_FLOW];
-        lk_optical_flow(prev_frame, fb->buf, FRAME_W, FRAME_H,
-                        prev_corners, prev_n_corners, flow);
+        
+        // 1. Run the raw pixel tracker
+        int n_tracked = lk_optical_flow(prev_frame, fb->buf, FRAME_W, FRAME_H,
+                                        prev_corners, prev_n_corners, flow);
 
-        FlowDecomposition decomp;
-        flow_accum.add_frame(flow, prev_n_corners, &decomp);
+        // 2. THE NEW IPM METRIC FUSION
+        // We completely bypass the old FlowAccumulator and pass the raw tracks
+        // directly into your 3D ground projection median filter.
+        VioMeasurement meas = processFlowToMetric(flow, n_tracked, dt, delta_yaw_imu);
 
-        if (flow_accum.is_ready()) {
-            CameraMeasurement cm = flow_accum.get_measurement(esp_timer_get_time());
+        if (meas.valid) {
+            vx = meas.vx;
+            vy = meas.vy;
+            confidence = meas.confidence;
+            measurement_ready = true;
 
-            if (cm.valid) {
-                // Output raw pixel displacement for EKF
-                // dx = lateral pixels, dy = lateral pixels
-                // The EKF uses IMU for scale (meters)
-                dx = cm.lateral_dx;
-                dy = cm.lateral_dy;
-                confidence = cm.confidence;
-                measurement_ready = true;
-
-                ESP_LOGI(TAG, ">>> CAM: dir=%s lat(%+.1f,%+.1f) rad=%+.1f conf=%.2f",
-                         FlowAccumulator::direction_name(cm.direction),
-                         cm.lateral_dx, cm.lateral_dy,
-                         cm.radial_total, cm.confidence);
-            }
-            flow_accum.reset();
+            ESP_LOGI(TAG, ">>> CAM METRIC: vx=%+.3f m/s, vy=%+.3f m/s, conf=%.2f", 
+                     vx, vy, confidence);
         }
     }
 
+    // Save the current frame for the next loop
     memcpy(prev_frame, fb->buf, FRAME_BYTES);
     memcpy(prev_corners, corners, sizeof(Corner) * n_final);
     prev_n_corners = n_final;
@@ -305,6 +301,8 @@ bool cameraProcessFrame(float &dx, float &dy, float &confidence) {
     esp_camera_fb_return(fb);
     return measurement_ready;
 }
+
+
 
 void cameraDebugCheck() {
     if (!Serial.available()) return;

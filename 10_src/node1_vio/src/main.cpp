@@ -41,9 +41,10 @@ constexpr uint32_t TX_PERIOD_MS    = 20;  // 50 Hz
 constexpr uint32_t CAM_PERIOD_MS   = 200; // 5 Hz (placeholder)
 
 // ── Timing trackers ───────────────────────────────────────────────────────
-static uint32_t lastImuMs  = 0;
-static uint32_t lastTxMs   = 0;
-static uint32_t lastCamMs  = 0;
+static uint32_t lastImuMs   = 0;
+static uint32_t lastCamMs   = 0;
+static uint32_t lastPrintMs = 0;
+static float last_cam_yaw   = 0.0f;
 
 // ─────────────────────────────────────────────────────────────────────────
 void setup() {
@@ -75,6 +76,8 @@ void setup() {
 
     // TODO (Panchtio): ArduCAM init + test JPEG capture
 
+    drift::ekfGetOrientation(last_cam_yaw);
+
 
 
 
@@ -101,16 +104,28 @@ void loop() {
     }
 
     // ── Camera capture ───────────────────────────────────────────────────
-    if (now - lastCamMs >= CAM_PERIOD_MS) {
+    if (VISION_ENABLED && (now - lastCamMs >= CAM_PERIOD_MS)) {
+        float cam_dt = (now - lastCamMs) / 1000.0f; 
         lastCamMs = now;
-        // TODO (Panchtio): captureFrame() → feature extraction → EKF update
-
-        float dx, dy, confidence;
-        // If the optical flow accumulator finishes a window:
-        if (drift::cameraProcessFrame(dx, dy, confidence)) {
-            // EKF UPDATE: Feed the visual displacement to the math engine!
-            drift::ekfUpdateCamera(dx, dy); 
-            printf("[NODE 1] EKF updated with camera measurement: dx=%.3f m, dy=%.3f m, confidence=%.2f\n", dx, dy, confidence);
+        
+        // 1. Calculate how much the IMU rotated since the last camera frame
+        float current_yaw;
+        drift::ekfGetOrientation(current_yaw);
+        
+        // Calculate shortest path angular difference to prevent 360-degree wrap-around bugs
+        float delta_yaw_imu = current_yaw - last_cam_yaw;
+        while (delta_yaw_imu > M_PI)  delta_yaw_imu -= 2.0f * M_PI;
+        while (delta_yaw_imu < -M_PI) delta_yaw_imu += 2.0f * M_PI;
+        
+        last_cam_yaw = current_yaw; // Save for next frame
+        
+        float meas_vx, meas_vy, confidence;
+        
+        // 2. Pass the dt AND the rotation fix into the camera processor
+        if (drift::cameraProcessFrame(meas_vx, meas_vy, confidence, cam_dt, delta_yaw_imu)) {
+            
+            // 3. Fuse the metric, derotated anchor into the physics engine!
+            drift::ekfUpdateCamera(meas_vx, meas_vy, current_yaw, confidence); 
         }
     }
 
