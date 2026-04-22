@@ -1,67 +1,67 @@
-/**
- * @file  ekf.h
- * @brief Extended Kalman Filter — state prediction & update interface
- *
- * State vector (12-DOF):
- *   [px, py, pz,        position (m)
- *    vx, vy, vz,        velocity (m/s)
- *    roll, pitch, yaw,  orientation (rad)
- *    bx, by, bz]        gyro bias (rad/s)
- *
- * @author Phillipp Gery
- */
-
 #pragma once
-#include <Arduino.h>
 
 namespace drift {
 
-/** @brief EKF state dimension */
-constexpr int STATE_DIM = 12;
-
-/** @brief EKF measurement dimension (IMU: ax,ay,az,gx,gy,gz) */
-constexpr int IMU_MEAS_DIM = 6;
+// ─── The New 2D Planar Architecture ───
+// State Vector: [px, py, vx, vy, yaw, bgz]^T
+constexpr int STATE_DIM = 6;
 
 /**
- * @brief Initialize EKF with identity covariance matrices.
+ * @brief Initializes the EKF matrices (State, Covariance, Process Noise).
  */
 void ekfInit();
 
-/**
- * @brief IMU predict step — propagate state using gyro/accel.
- * @param ax  Accel X (m/s²)
- * @param ay  Accel Y (m/s²)
- * @param az  Accel Z (m/s²)
- * @param gx  Gyro X (rad/s)
- * @param gy  Gyro Y (rad/s)
- * @param gz  Gyro Z (rad/s)
- * @param dt  Time step (s)
- */
-void ekfPredict(float ax, float ay, float az,
-                float gx, float gy, float gz,
-                float dt);
+// ─── The Tuning Payload ──────────────────────────────────────────────────
+struct EkfConfig {
+    // Initial Covariance (P)
+    float p_init = 1.0f;
+    
+    // Process Noise (Q) - How much drift we expect per step
+    float q_px  = 0.001f;
+    float q_py  = 0.001f;
+    float q_vx  = 0.01f;
+    float q_vy  = 0.01f;
+    float q_yaw = 0.005f;
+    float q_bgz = 0.0001f;
+    
+    // Measurement Noise (R) - Camera baseline error
+    float cam_base_noise = 0.001f;
+};
+
 
 /**
- * @brief Camera update step — correct state with visual feature displacement.
- * @param du  Optical flow u (pixels)
- * @param dv  Optical flow v (pixels)
+ * @brief Predict step: Drives the physics engine forward using IMU data.
+ * @param ax Linear acceleration in X (m/s^2) - MUST be static-bias corrected!
+ * @param ay Linear acceleration in Y (m/s^2) - MUST be static-bias corrected!
+ * @param gz Angular velocity around Z (rad/s) - MUST be in radians!
+ * @param dt Time delta since last reading (seconds)
  */
-void ekfUpdateCamera(float du, float dv);
+void ekfPredict(float ax, float ay, float gz, float dt);
 
 /**
- * @brief Get current position estimate.
- * @param[out] px  X position (m)
- * @param[out] py  Y position (m)
- * @param[out] pz  Z position (m)
+ * @brief Update step: Anchors the physics engine using camera data.
+ * @param meas_vx The measured X velocity (m/s). 0.0 for static test.
+ * @param meas_vy The measured Y velocity (m/s). 0.0 for static test.
+ * @param meas_yaw The absolute measured yaw (radians).
+ * @param confidence Reliability metric (0.0 to 1.0). High value = trust camera.
  */
-void ekfGetPosition(float &px, float &py, float &pz);
+void ekfUpdateCamera(float meas_vx, float meas_vy, float meas_yaw, float confidence);
 
 /**
- * @brief Get current orientation (Euler angles).
- * @param[out] roll   Roll (rad)
- * @param[out] pitch  Pitch (rad)
- * @param[out] yaw    Yaw (rad)
+ * @brief Retrieves the current 2D position estimate for telemetry.
  */
-void ekfGetOrientation(float &roll, float &pitch, float &yaw);
+void ekfGetPosition(float &px, float &py);
+
+/**
+ * @brief Retrieves the current orientation estimate for telemetry.
+ */
+void ekfGetOrientation(float &yaw);
+
+
+/**
+ * @brief Forces the state vector back to absolute zero and resets uncertainty.
+ * Use this after hardware initialization or when recovering from a crash.
+ */
+void ekfReset();
 
 } // namespace drift

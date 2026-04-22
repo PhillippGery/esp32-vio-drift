@@ -49,7 +49,7 @@ void setup() {
     imu.calibrate();
     Serial.printf("=== Calibration Complete ===\n");
     Serial.printf("Offsets ax:%.4f ay:%.4f az:%.4f\n",
-                  imu.offsetAx, imu.offsetAy, imu.offsetAz);
+        imu.offsetAx, imu.offsetAy, imu.offsetAz);
 }
 
 void loop() {
