@@ -20,7 +20,9 @@
 #include "ekf.h"
 #include "status_led.h"
 #include "vio_camera.h"
-#include "mpu6050.h"
+#include "MPU6050.h"
+
+MPU6050 imu; // I2C address 0x68 by default, can be changed if needed
 
 // TODO (Panchtio): include ArduCAM headers
 // TODO (Phillipp): include EKF header from include/ekf.h
@@ -38,15 +40,20 @@
 // ── Task periods (ms) ─────────────────────────────────────────────────────
 constexpr uint32_t IMU_PERIOD_MS   = 5;   // 200 Hz
 constexpr uint32_t TX_PERIOD_MS    = 20;  // 50 Hz
-constexpr uint32_t CAM_PERIOD_MS   = 200; // 5 Hz (placeholder)
-constexpr uint32_t PRINT_PERIOD_MS = 200; // 5 Hz telemetry print
+constexpr uint32_t CAM_PERIOD_MS   = 50; // 20 Hz (placeholder)
+constexpr uint32_t PRINT_PERIOD_MS = 300; // 5 Hz telemetry print
+constexpr bool VISION_ENABLED = true; // Set to false to disable camera and run IMU-only EKF
 
 // ── Timing trackers ───────────────────────────────────────────────────────
 static uint32_t lastImuMs  = 0;
 static uint32_t lastTxMs   = 0;
 static uint32_t lastCamMs  = 0;
 static uint32_t lastPrintMs = 0;
-static float last_cam_yaw   = 0.0f;
+static float initial_yaw = 0.0f;
+static float last_cam_yaw = initial_yaw;
+static float last_cam_confidence = 0.0f;
+
+
 
 // ─────────────────────────────────────────────────────────────────────────
 void setup() {
@@ -156,7 +163,7 @@ void loop() {
         
         // 2. Pass the dt AND the rotation fix into the camera processor
         if (drift::cameraProcessFrame(meas_vx, meas_vy, confidence, cam_dt, delta_yaw_imu)) {
-            
+            last_cam_confidence = confidence;
             // 3. Fuse the metric, derotated anchor into the physics engine!
             drift::ekfUpdateCamera(meas_vx, meas_vy, current_yaw, confidence); 
         }
@@ -183,6 +190,10 @@ void loop() {
         float yaw_deg = yaw * (180.0f / PI);
 
         // Print the EKF State
+        Serial.printf("      (last cam meas: vx=%+.3f m/s, vy=%+.3f m/s, conf=%.2f)\n", 
+                      last_cam_yaw, last_cam_yaw, last_cam_confidence);
+
         Serial.printf("[EKF] X: %8.3f m | Y: %8.3f m | Yaw: %8.3f deg\n", px, py, yaw_deg);
+
     }
 }

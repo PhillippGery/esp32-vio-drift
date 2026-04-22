@@ -7,7 +7,7 @@ constexpr int MAX_FEATURES = 100;
 
 namespace drift {
 
-// NOTICE: Added delta_yaw_imu to the signature!
+
 VioMeasurement processFlowToMetric(const FlowVector* flow_vectors, int count, float dt, float delta_yaw_imu) {
     VioMeasurement result = {0.0f, 0.0f, 0.0f, false};
 
@@ -27,7 +27,7 @@ VioMeasurement processFlowToMetric(const FlowVector* flow_vectors, int count, fl
         // 1. Project the OLD pixel coordinate to the ground
         GroundPoint p_old = pixelToGround(flow_vectors[i].px, flow_vectors[i].py);
         
-        // 2. THE FIX: Derotate the old point using the IMU's angle change
+        // 2. Derotate the old point using the IMU's angle change
         float p_old_rot_x = p_old.x * c - p_old.y * s;
         float p_old_rot_y = p_old.x * s + p_old.y * c;
 

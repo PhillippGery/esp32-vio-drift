@@ -257,7 +257,7 @@ bool cameraInit() {
     return true;
 }
 
-bool cameraProcessFrame(float &vx, float &vy, float &confidence, float dt) {
+bool cameraProcessFrame(float &vx, float &vy, float &confidence, float dt, float delta_yaw_imu) {
     if (test_mode) return false;
 
     camera_fb_t *fb = capture_frame();
@@ -287,8 +287,8 @@ bool cameraProcessFrame(float &vx, float &vy, float &confidence, float dt) {
             confidence = meas.confidence;
             measurement_ready = true;
 
-            ESP_LOGI(TAG, ">>> CAM METRIC: vx=%+.3f m/s, vy=%+.3f m/s, conf=%.2f", 
-                     vx, vy, confidence);
+            // ESP_LOGI(TAG, ">>> CAM METRIC: vx=%+.3f m/s, vy=%+.3f m/s, conf=%.2f", 
+            //          vx, vy, confidence);
         }
     }
 
