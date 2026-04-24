@@ -21,3 +21,7 @@ cd node2_imu && pio run --target upload
 # Node 3, 4, or 5 (choose env)
 cd node3_5_imu && pio run -e node3 --target upload
 ```
+
+## Potential issues
+
+The issue for me was that PlatformIO's default upload speed (921600 baud) caused a serial handshake failure. Using esptool directly at 460800 baud worked perfectly.

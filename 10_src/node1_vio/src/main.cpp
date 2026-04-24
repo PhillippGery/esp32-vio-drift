@@ -16,13 +16,11 @@
 #include <Arduino.h>
 #include <Wire.h>
 #include <SPI.h>
-#include <ArduinoJson.h>
 #include "ekf.h"
 #include "status_led.h"
 #include "vio_camera.h"
 #include "MPU6050.h"
-
-MPU6050 imu; // I2C address 0x68 by default, can be changed if needed
+#include "transport.h"
 
 // TODO (Panchtio): include ArduCAM headers
 // TODO (Phillipp): include EKF header from include/ekf.h
@@ -53,7 +51,7 @@ static float initial_yaw = 0.0f;
 static float last_cam_yaw = initial_yaw;
 static float last_cam_confidence = 0.0f;
 
-
+MPU6050 imu;
 
 // ─────────────────────────────────────────────────────────────────────────
 void setup() {
@@ -172,10 +170,29 @@ void loop() {
     // ── Debug triggers (Catch 'c' commands from Python) ──────────────────
     //drift::cameraDebugCheck();
 
-    // ── Telemetry transmit ───────────────────────────────────────────────
+    // ── Telemetry TX ────────────────────────────────────────────────────────
     if (now - lastTxMs >= TX_PERIOD_MS) {
         lastTxMs = now;
-        // TODO (Sam): serialize EKF state to JSON → UDP send
+        drift::sendOdometryPacket(now);
+    }
+
+    // ── 3. DEBUG EKF (5 Hz) ────────────────────────────────────────
+    if (now - lastPrintMs >= PRINT_PERIOD_MS) {
+        lastPrintMs = now;
+        
+        float px, py, yaw;
+        drift::ekfGetPosition(px, py);
+        drift::ekfGetOrientation(yaw);
+
+        // Convert yaw back to degrees for easier 
+        float yaw_deg = yaw * (180.0f / PI);
+
+        // Print the EKF State
+        Serial.printf("      (last cam meas: vx=%+.3f m/s, vy=%+.3f m/s, conf=%.2f)\n", 
+                      last_cam_yaw, last_cam_yaw, last_cam_confidence);
+
+        Serial.printf("[EKF] X: %8.3f m | Y: %8.3f m | Yaw: %8.3f deg\n", px, py, yaw_deg);
+
     }
 
     // ── 3. DEBUG EKF (5 Hz) ────────────────────────────────────────
@@ -197,3 +214,4 @@ void loop() {
 
     }
 }
+

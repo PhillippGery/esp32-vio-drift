@@ -11,7 +11,8 @@
 
 #include <Arduino.h>
 #include <Wire.h>
-#include <ArduinoJson.h>
+#include "MPU6050.h"
+#include "transport.h"
 
 #ifndef NODE_ID
 #error "NODE_ID must be defined via platformio.ini build_flags (-DNODE_ID=3)"
@@ -29,6 +30,14 @@ constexpr uint32_t TX_PERIOD_MS  = 10;
 static uint32_t lastImuMs = 0;
 static uint32_t lastTxMs  = 0;
 
+MPU6050 imu;
+static float latestAx = 0.0f;
+static float latestAy = 0.0f;
+static float latestAz = 0.0f;
+static float latestGx = 0.0f;
+static float latestGy = 0.0f;
+static float latestGz = 0.0f;
+
 void setup() {
     Serial.begin(115200);
     while (!Serial && millis() < 3000) {}
@@ -36,10 +45,17 @@ void setup() {
     Serial.printf("[NODE %d] PROJECT DRIFT — IMU Node booting...\n", NODE_ID);
 
     Wire.begin(IMU_I2C_SDA, IMU_I2C_SCL);
+    imu.begin();
 
-    // TODO (Sam): MPU-6050 init
-    // TODO (Sam): WiFi + UDP socket init
+    if (!drift::transportInit()) {
+        Serial.printf("[NODE %d] CRITICAL: WiFi init failed! Halting.\n", NODE_ID);
+        while (true) { delay(1000); }
+    }
 
+    Serial.println("Calibrating — keep sensor still...");
+    imu.calibrate();
+    Serial.printf("=== Calibration Complete ===\n");
+    Serial.printf("Offsets ax:%.4f ay:%.4f az:%.4f\n", imu.offsetAx, imu.offsetAy, imu.offsetAz);
     Serial.printf("[NODE %d] Setup complete.\n", NODE_ID);
 }
 
@@ -48,11 +64,19 @@ void loop() {
 
     if (now - lastImuMs >= IMU_PERIOD_MS) {
         lastImuMs = now;
-        // TODO (Sam): read IMU → store sample
+        float ax, ay, az, gx, gy, gz;
+        if (imu.read(ax, ay, az, gx, gy, gz)) {
+            latestAx = ax;
+            latestAy = ay;
+            latestAz = az;
+            latestGx = gx;
+            latestGy = gy;
+            latestGz = gz;
+        }
     }
 
     if (now - lastTxMs >= TX_PERIOD_MS) {
         lastTxMs = now;
-        // TODO (Sam): serialize to JSON → UDP send to Node 1
+        drift::sendImuPacket(now, latestAx, latestAy, latestAz, latestGx, latestGy, latestGz);
     }
 }
