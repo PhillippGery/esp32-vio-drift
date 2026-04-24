@@ -15,7 +15,7 @@ bool cameraInit();
  * @param[out] confidence How reliable the measurement is
  * @return true ONLY if a full window of flow has accumulated and VIO data is ready.
  */
-bool cameraProcessFrame(float &dx, float &dy, float &confidence);
+bool cameraProcessFrame(float &vx, float &vy, float &confidence, float dt, float delta_yaw_imu);
 
 /**
  * @brief Checks Serial for the 'c' command to trigger a debug capture.
