@@ -12,10 +12,10 @@
 
 #include <Arduino.h>
 #include <Wire.h>
-#include <ArduinoJson.h>
 #include "MPU6050.h"
 #include "dead_reckoning.h"
 #include "status_led.h"
+#include "transport.h"
 
 #ifndef NODE_ID
 #define NODE_ID 2
@@ -35,21 +35,26 @@ static uint32_t lastTxMs  = 0;
 
 MPU6050 imu;
 static drift::DeadReckoner tracker;
+static float latestAx = 0.0f;
+static float latestAy = 0.0f;
+static float latestAz = 0.0f;
+static float latestGx = 0.0f;
+static float latestGy = 0.0f;
+static float latestGz = 0.0f;
 
 void setup() {
     Serial.begin(115200);
-    Wire.begin(22, 14);
+    Wire.begin(IMU_I2C_SDA, IMU_I2C_SCL);
     imu.begin();
 
     drift::ledInit();
     drift::ledSet(drift::StatusColor::RED);
-    
-    
 
-    // TODO (Sam): MPU-6050 init
-    // TODO (Sam): WiFi + UDP socket init
+    if (!drift::transportInit()) {
+        Serial.println("[NODE 2] CRITICAL: WiFi init failed! Halting.");
+        while (true) { delay(1000); }
+    }
 
-    
     Serial.println("Calibrating — keep sensor still...");
     imu.calibrate();
     Serial.printf("=== Calibration Complete ===\n");
@@ -61,22 +66,21 @@ void setup() {
 void loop() {
     uint32_t now = millis();
 
-
-
-
     if (now - lastImuMs >= IMU_PERIOD_MS) {
-        float dt = (now - lastImuMs) / 1000.0f; // dt in seconds
+        uint32_t dt_ms = lastImuMs == 0 ? IMU_PERIOD_MS : (now - lastImuMs);
         lastImuMs = now;
+        float dt = dt_ms / 1000.0f; // dt in seconds
 
-
-        // TODO (Vedant): read IMU → store sample
         float ax, ay, az, gx, gy, gz;
-        imu.read(ax, ay, az, gx, gy, gz);
-        //Serial.printf("A: %.3f  %.3f  %.3f  |  G: %.3f  %.3f  %.3f\n", ax, ay, az, gx, gy, gz);
         if (imu.read(ax, ay, az, gx, gy, gz)) {
-            
+            latestAx = ax;
+            latestAy = ay;
+            latestAz = az;
+            latestGx = gx;
+            latestGy = gy;
+            latestGz = gz;
+
             float gz_rad = gz * (PI / 180.0f); // deg/s to rad/s
-            
             tracker.update(ax, ay, gz_rad, dt);
         }
     }
@@ -84,16 +88,14 @@ void loop() {
     static uint32_t lastPrintMs = 0;
     if (now - lastPrintMs >= 500) {
         lastPrintMs = now;
-        
-        // 5. Get the total delta movement
-        float total_drift = tracker.getDeltaMovement();
-        
-        Serial.printf("Pos: X:%.3f Y:%.3f | Total Delta: %.3f meters\n | Yaw: %.3f rad", tracker.px, tracker.py, total_drift, tracker.yaw);
-    }
 
+        float total_drift = tracker.getDeltaMovement();
+        Serial.printf("Pos: X:%.3f Y:%.3f | Total Delta: %.3f meters | Yaw: %.3f rad\n",
+                      tracker.px, tracker.py, total_drift, tracker.yaw);
+    }
 
     if (now - lastTxMs >= TX_PERIOD_MS) {
         lastTxMs = now;
-        // TODO (Sam): serialize to JSON → UDP send to Node 1
+        drift::sendImuPacket(now, latestAx, latestAy, latestAz, latestGx, latestGy, latestGz);
     }
 }

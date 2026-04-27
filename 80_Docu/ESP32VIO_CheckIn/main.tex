@@ -1,0 +1,69 @@
+\documentclass[sigconf,nonacm]{acmart}
+
+\begin{document}
+	
+	\title{DRIFT: Distributed Real-time Inertial and Frame Tracking}
+	\subtitle{Spring 2026 ECE 56800 Project Check-in\\Team DRIFT}
+	
+	\author{Phillipp Gery (Lead), Francisco Benitez, Sam Pisciotta, Vedant Patkar, Jack Kester}
+	
+	\maketitle
+	
+	\section{Introduction}
+	GPS-free localization is a fundamental challenge in mobile robotics and autonomous systems. PROJECT DRIFT builds a Visual-Inertial Odometry (VIO) system on a 5-node ESP32 network that fuses real-time camera frames with IMU data through an Extended Kalman Filter (EKF) \cite{welch2006kalman} to estimate position and orientation without any external infrastructure. Node 1 runs the full camera-IMU fusion pipeline, while Nodes 2-5 run IMU-only dead reckoning as controlled baselines. Unlike state-of-the-art VIO systems like ORB-SLAM3 \cite{campos2021orb} that require heavy embedded CPUs or GPUs, our entire pipeline runs on a 240 MHz dual-core MCU with 8 MB PSRAM, proving that highly accurate sensor fusion can be achieved on heavily constrained edge hardware.
+	
+	\section{Progress}
+	According to our Week 4 and Week 5 schedule, we are currently transitioning from the VIO pipeline integration to evaluation and TinyML data collection. The foundational responsibilities have been successfully executed:
+	\begin{itemize}
+		\item Sam completed the bare-metal RTOS drivers and the data pipeline to the home station for all 5 nodes.
+		\item Francisco implemented the XIAO ESP32-S3 OV3660 drivers and FAST corner detection \cite{rosten2010faster}.
+		\item Phillipp finalized the system architecture and EKF fusion core.
+		\item Jack completed the data receiving and visualization dashboard.
+	\end{itemize}
+	We experienced slight delays completing the Node 1 vs. Node 2-3 comparative tests due to mathematical bottlenecks (detailed below), but the core VIO engine is now operational. Vedant is preparing to lead the Week 5 optical flow refinements and Edge Impulse TinyML trajectory recording \cite{warden2019tinyml}.
+	
+	\section{Challenges}
+	Our proposal correctly identified that SPI bus load, I2C polling, and EKF compute budgets competing for CPU cycles was our biggest risk. This materialized severely: utilizing standard 3D epipolar geometry (Essential Matrix/SVD) choked the ESP32, causing frame drops that broke the 200 Hz IMU fusion loop. Additionally, we encountered "rotational bleed" in the Lucas-Kanade optical flow, where the camera mathematically confused turning in place with lateral translation, and our MPU-6050s suffered from severe thermal drift.
+	
+	\section{Change of Plan}
+	Our proposal stated that if the camera pipeline was unstable past Week 3, Node 1 would pivot to IMU-only. Instead of abandoning the vision system, we executed a rigorous mathematical pivot inspired by high-efficiency semi-direct tracking concepts \cite{forster2014svo}. Because our evaluation trajectories (Straight, Rectangle, Circle) occur on a 2D plane, we scrapped 3D matrix decompositions in favor of Inverse Perspective Mapping (IPM). By projecting 2D tracked pixels directly onto the 3D ground plane, we extract absolute metric velocity in computationally cheap $O(N)$ time. 
+	
+	To resolve the rotational bleed without burning CPU cycles, we physically stacked the camera and IMU and now use the IMU's Z-axis gyroscope to mathematically derotate the optical flow vectors before comparison. Finally, to address the MPU-6050 noise floor, we are actively attempting to secure a hardware sponsorship from Würth Elektronik for industrial-grade IMUs.
+	
+	\section{Preliminary Results}
+	Nodes 2-5 are actively transmitting baseline data. As anticipated, IMU-only dead reckoning exhibits massive drift, accumulating over 100 meters of error within 30 seconds of stationary operation due to raw double-integration. On Node 1, initial static bench tests of our new IPM + Gyro-derotation math successfully isolate translation from rotation, holding lateral drift at $0.0 \text{ m/s}$ during pure yaw movement. We are now preparing to measure our primary evaluation metric: endpoint drift error on the 1m x 0.5m rectangle trajectory.
+	
+\section{Note to Professor}
+At this stage, we are re-evaluating the timeline for our Week 5 TinyML motion classifier stretch goal. Given the architectural pivot to Inverse Perspective Mapping (IPM) and the precision required for gyro-derotation, we are strategically allocating our immediate bandwidth to rigorous EKF covariance tuning, finalizing the PC visualization dashboard, and executing the quantitative baseline evaluations. We are committed to ensuring the core Visual-Inertial Odometry pipeline is mathematically bulletproof and quantitatively verified before introducing the machine learning pipeline.
+	
+	\bibliographystyle{ACM-Reference-Format}
+	\begin{thebibliography}{9}
+		
+		\bibitem{forster2014svo}
+		C. Forster, M. Pizzoli, and D. Scaramuzza. 2014.
+		\newblock SVO: Fast Semi-Direct Monocular Visual Odometry.
+		\newblock \emph{Proc. IEEE ICRA}, 15--22.
+		
+		\bibitem{campos2021orb}
+		C. Campos et al. 2021.
+		\newblock ORB-SLAM3: An Accurate Open-Source Library for Visual, Visual-Inertial and Multi-Map SLAM.
+		\newblock \emph{IEEE Trans. Robotics}, 37(6), 1874--1890.
+		
+		\bibitem{rosten2010faster}
+		E. Rosten, R. Porter, and T. Drummond. 2010.
+		\newblock Faster and Better: A Machine Learning Approach to Corner Detection.
+		\newblock \emph{IEEE TPAMI}, 32(1), 105--119.
+		
+		\bibitem{warden2019tinyml}
+		P. Warden and D. Situnayake. 2019.
+		\newblock TinyML.
+		\newblock \emph{O'Reilly Media}.
+		
+		\bibitem{welch2006kalman}
+		G. Welch and G. Bishop. 2006.
+		\newblock An Introduction to the Kalman Filter.
+		\newblock \emph{UNC Chapel Hill, Tech. Rep. TR 95-041}.
+		
+	\end{thebibliography}
+	
+\end{document}

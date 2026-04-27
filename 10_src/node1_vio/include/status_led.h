@@ -2,17 +2,10 @@
 
 namespace drift {
 
-// Define our clean status states
-enum class StatusColor {
-    OFF,
-    RED,
-    GREEN
-};
-
-// Initialize the hardware
+// Initialize the hardware pin
 void ledInit();
 
-// The one-liner to change the color
-void ledSet(StatusColor color);
+// Turn the XIAO built-in LED on or off
+void ledSet(bool isOn);
 
 } // namespace drift

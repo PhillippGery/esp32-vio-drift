@@ -117,3 +117,20 @@ $RECYCLE.BIN/
 # -----------------------------------------------------------------------------
 *.log
 serial_capture_*.txt
+platformio.ini
+.vscode/extensions.json
+10_src/node1_vio/test_frames/test_frame_0_2x.png
+10_src/node1_vio/test_frames/test_frame_0.png
+10_src/node1_vio/test_frames/test_frame_1_2x.png
+10_src/node1_vio/test_frames/test_frame_1.png
+10_src/node1_vio/test_frames/test_frame_2_2x.png
+10_src/node1_vio/test_frames/test_frame_2.png
+10_src/node1_vio/test_frames/test_frame_3_2x.png
+10_src/node1_vio/test_frames/test_frame_3.png
+10_src/node1_vio/test_frames/test_frame_4_2x.png
+10_src/node1_vio/test_frames/test_frame_4.png
+10_src/node1_vio/test_frames/test_frame_5_2x.png
+10_src/node1_vio/test_frames/test_frame_5.png
+10_src/node1_vio/test_frames/test_frame_6_2x.png
+10_src/node1_vio/test_frames/test_frame_6.png
+10_src/node1_vio/test_viewer.py
