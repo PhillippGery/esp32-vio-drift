@@ -9,34 +9,10 @@ extern "C" {
     #include "WSEN_ISDS_2536030320001.h"
 }
 
-// 1. Add the exact same smoothing filter from your MPU-6050!
-template<int N = 5>
-class ISDS_MovingAvg {
-    float buf[N] = {};
-    int idx = 0;
-    bool full = false;
-public:
-    float update(float val) {
-        buf[idx] = val;
-        idx = (idx + 1) % N;
-        if (idx == 0) full = true;
-        
-        int count = full ? N : idx;
-        float sum = 0;
-        for (int i = 0; i < count; i++) {
-            sum += buf[i];
-        }
-        return sum / count;
-    }
-};
-
 class WurthISDS {
 public:
     float offsetAx = 0.0f, offsetAy = 0.0f, offsetAz = 0.0f;
     float offsetGx = 0.0f, offsetGy = 0.0f, offsetGz = 0.0f;
-
-    // Filter instances for all 6 axes
-    ISDS_MovingAvg<5> _fax, _fay, _faz, _fgx, _fgy, _fgz;
 
     WE_sensorInterface_t sensorInterface;
 
@@ -62,7 +38,7 @@ public:
         float sumGx = 0, sumGy = 0, sumGz = 0;
         float ax, ay, az, gx, gy, gz;
 
-        // 2. NEW: Throw away the first 50 samples to let the physical silicon settle!
+        // Throw away the first 50 samples to let the physical silicon settle
         for (int i = 0; i < 50; i++) {
             readRaw(ax, ay, az, gx, gy, gz);
             delay(5);
@@ -102,16 +78,8 @@ public:
             gx -= offsetGx;
             gy -= offsetGy;
             gz -= offsetGz;
-
-            // 3. NEW: Apply the software shock absorbers!
-            ax = _fax.update(ax);
-            ay = _fay.update(ay);
-            az = _faz.update(az);
-            gx = _fgx.update(gx);
-            gy = _fgy.update(gy);
-            gz = _fgz.update(gz);
             
-            // Convert to matching physics units
+            // Convert to matching physics units (NO FILTERING FOR EKF!)
             ax = (ax / 1000.0f) * 9.81f;
             ay = (ay / 1000.0f) * 9.81f;
             az = (az / 1000.0f) * 9.81f;
