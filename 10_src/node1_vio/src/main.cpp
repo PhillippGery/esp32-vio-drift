@@ -19,6 +19,7 @@
 #include "ekf.h"
 #include "status_led.h"
 #include "vio_camera.h"
+#include "WurthISDS.h"
 #include "MPU6050.h"
 #include "transport.h"
 
@@ -52,6 +53,7 @@ static float last_cam_yaw = initial_yaw;
 static float last_cam_confidence = 0.0f;
 
 MPU6050 imu;
+WurthISDS imu;
 
 // ─────────────────────────────────────────────────────────────────────────
 void setup() {
@@ -134,6 +136,7 @@ void loop() {
             
             // CRITICAL: Convert gyroscope Z from degrees/s to radians/s
             float gz_rad = gz * (PI / 180.0f);
+            //remove the above line incase rotations arent displaying appropraiately. everything is being converted in the wurthISDS FIle
             
             // Drive the physics engine forward
             drift::ekfPredict(ax, ay, gz_rad, dt);

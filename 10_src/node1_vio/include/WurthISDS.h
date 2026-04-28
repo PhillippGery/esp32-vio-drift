@@ -9,64 +9,43 @@ extern "C" {
     #include "WSEN_ISDS_2536030320001.h"
 }
 
-// 1. Add the exact same smoothing filter from your MPU-6050!
-template<int N = 5>
-class ISDS_MovingAvg {
-    float buf[N] = {};
-    int idx = 0;
-    bool full = false;
-public:
-    float update(float val) {
-        buf[idx] = val;
-        idx = (idx + 1) % N;
-        if (idx == 0) full = true;
-        
-        int count = full ? N : idx;
-        float sum = 0;
-        for (int i = 0; i < count; i++) {
-            sum += buf[i];
-        }
-        return sum / count;
-    }
-};
-
 class WurthISDS {
 public:
+    // Calibration offsets
     float offsetAx = 0.0f, offsetAy = 0.0f, offsetAz = 0.0f;
     float offsetGx = 0.0f, offsetGy = 0.0f, offsetGz = 0.0f;
-
-    // Filter instances for all 6 axes
-    ISDS_MovingAvg<5> _fax, _fay, _faz, _fgx, _fgy, _fgz;
 
     WE_sensorInterface_t sensorInterface;
 
     bool begin() {
+        // Initialize the default sensor interface from the driver
         ISDS_getDefaultInterface(&sensorInterface);
-        sensorInterface.options.i2c.address = ISDS_ADDRESS_I2C_1; 
+        
+        // Ensure standard I2C address is set (0x6B by default on the EV board)
+        sensorInterface.options.i2c.address = ISDS_ADDRESS_I2C_1; // Note: I2C_1 is 0x6B, I2C_0 is 0x6A
 
+        // Soft reset the sensor
         ISDS_softReset(&sensorInterface, ISDS_enable);
         delay(50); // Wait for boot
 
-        ISDS_setAccFullScale(&sensorInterface, ISDS_accFullScaleFourG);
+        // Set Full Scales and Output Data Rates using the SDK functions
+        ISDS_setAccFullScale(&sensorInterface, ISDS_accFullScaleSixteenG);
         ISDS_setAccOutputDataRate(&sensorInterface, ISDS_accOdr208Hz);
         
-        ISDS_setGyroFullScale(&sensorInterface, ISDS_gyroFullScale500dps);
+        ISDS_setGyroFullScale(&sensorInterface, ISDS_gyroFullScale2000dps);
         ISDS_setGyroOutputDataRate(&sensorInterface, ISDS_gyroOdr208Hz);
 
+        // Turn on Block Data Update (BDU) for stable reads
         ISDS_enableBlockDataUpdate(&sensorInterface, ISDS_enable);
+
         return true;
     }
 
+    // --- CALIBRATION ROUTINE ---
     void calibrate(int samples = 500) {
         float sumAx = 0, sumAy = 0, sumAz = 0;
         float sumGx = 0, sumGy = 0, sumGz = 0;
         float ax, ay, az, gx, gy, gz;
-
-        // 2. NEW: Throw away the first 50 samples to let the physical silicon settle!
-        for (int i = 0; i < 50; i++) {
-            readRaw(ax, ay, az, gx, gy, gz);
-            delay(5);
-        }
 
         for (int i = 0; i < samples; i++) {
             readRaw(ax, ay, az, gx, gy, gz);
@@ -76,11 +55,13 @@ public:
             sumGx += gx;
             sumGy += gy;
             sumGz += gz;
-            delay(5); 
+            delay(5); // Wait roughly 1 period at 200Hz
         }
 
+        // Calculate averages
         offsetAx = sumAx / samples;
         offsetAy = sumAy / samples;
+        // Gravity is typically 1g (1000mg) on the Z axis assuming it is flat on a table
         offsetAz = (sumAz / samples) - 1000.0f; 
         
         offsetGx = sumGx / samples;
@@ -89,33 +70,27 @@ public:
     }
 
     bool read(float &ax, float &ay, float &az, float &gx, float &gy, float &gz) {
+        // Check if data is ready using the driver's status register function
         ISDS_state_t accReady, gyroReady;
         ISDS_isDataReady(&sensorInterface, NULL, &accReady, &gyroReady);
         
         if (accReady == ISDS_enable && gyroReady == ISDS_enable) {
             readRaw(ax, ay, az, gx, gy, gz);
             
-            // Subtract offsets
+            // 1. Apply calibration offsets (calculated in mg and mdps)
             ax -= offsetAx;
             ay -= offsetAy;
             az -= offsetAz;
             gx -= offsetGx;
             gy -= offsetGy;
             gz -= offsetGz;
-
-            // 3. NEW: Apply the software shock absorbers!
-            ax = _fax.update(ax);
-            ay = _fay.update(ay);
-            az = _faz.update(az);
-            gx = _fgx.update(gx);
-            gy = _fgy.update(gy);
-            gz = _fgz.update(gz);
             
-            // Convert to matching physics units
+            // 2. Convert to m/s^2 (matching ekf.cpp gravity exactly)
             ax = (ax / 1000.0f) * 9.81f;
             ay = (ay / 1000.0f) * 9.81f;
             az = (az / 1000.0f) * 9.81f;
 
+            // 3. Convert to rad/s
             gx = (gx / 1000.0f) * (PI / 180.0f);
             gy = (gy / 1000.0f) * (PI / 180.0f);
             gz = (gz / 1000.0f) * (PI / 180.0f);
@@ -127,11 +102,15 @@ public:
 
 private:
     void readRaw(float &ax, float &ay, float &az, float &gx, float &gy, float &gz) {
+        // Use the driver's float conversion functions
         ISDS_getAccelerations_float(&sensorInterface, &ax, &ay, &az);
         ISDS_getAngularRates_float(&sensorInterface, &gx, &gy, &gz);
     }
 };
 
+// --- REQUIRED PLATFORM FUNCTIONS ---
+// The Würth C SDK expects these functions to be implemented in your project 
+// to handle the actual hardware I2C transmission.
 extern "C" {
     int8_t WE_ReadReg(WE_sensorInterface_t* interface, uint8_t regAdr, uint16_t numBytesToRead, uint8_t* data) {
         Wire.beginTransmission(interface->options.i2c.address);

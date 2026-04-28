@@ -10,8 +10,8 @@
 #include <ArduinoJson.h>
 #include "transport.h"
 
-static const char* WIFI_SSID = "Apt 222";
-static const char* WIFI_PASSWORD = "netpass222";
+static const char* WIFI_SSID = "Doorman";
+static const char* WIFI_PASSWORD = "TNBiscuits";
 static const char* UDP_TARGET_IP = "255.255.255.255";
 constexpr uint16_t UDP_TARGET_PORT = 4210;
 constexpr uint16_t UDP_LOCAL_PORT = 4212;
