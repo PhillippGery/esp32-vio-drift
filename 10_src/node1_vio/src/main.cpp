@@ -88,9 +88,9 @@ void imuTask(void* pvParameters) {
         // read() automatically applies the static calibration offsets!
         if (imu.read(ax, ay, az, gx, gy, gz)) {
             // CRITICAL: Convert gyroscope Z from degrees/s to radians/s
-            float gz_rad = gz * (PI / 180.0f);
+            //float gz_rad = gz * (PI / 180.0f);
 
-            ImuData data = { ax, ay, gz_rad, dt };
+            ImuData data = { ax, ay, gz, dt };
             xQueueSend(imuQueue, &data, 0); // non-blocking: drop if full
         }
     }
