@@ -22,8 +22,9 @@
 #include "ekf.h"
 #include "status_led.h"
 #include "vio_camera.h"
-#include "MPU6050.h"
+//#include "MPU6050.h"
 #include "transport.h"
+#include "WurthISDS.h"
 
 // TODO (Panchtio): include ArduCAM headers
 // TODO (Phillipp): include EKF header from include/ekf.h
@@ -63,7 +64,7 @@ static float initial_yaw       = 0.0f;
 static float last_cam_yaw      = initial_yaw;
 static float last_cam_confidence = 0.0f;
 
-MPU6050 imu;
+WurthISDS imu;
 
 
 // ─────────────────────────────────────────────────────────────────────────
