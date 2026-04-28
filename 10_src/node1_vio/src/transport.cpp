@@ -44,18 +44,17 @@ bool drift::transportInit() {
 }
 
 void drift::sendOdometryPacket(uint32_t timestamp_ms) {
-    float px, py, pz, roll, pitch, yaw;
-    drift::ekfGetPosition(px, py, pz);
-    drift::ekfGetOrientation(roll, pitch, yaw);
+    if (WiFi.status() != WL_CONNECTED) return;
 
-    StaticJsonDocument<256> packet;
+    float px, py, yaw;
+    drift::ekfGetPosition(px, py);
+    drift::ekfGetOrientation(yaw);
+
+    JsonDocument packet;
     packet["node"] = NODE_ID;
     packet["ts"] = timestamp_ms;
     packet["px"] = px;
     packet["py"] = py;
-    packet["pz"] = pz;
-    packet["roll"] = roll;
-    packet["pitch"] = pitch;
     packet["yaw"] = yaw;
 
     char buffer[256];
