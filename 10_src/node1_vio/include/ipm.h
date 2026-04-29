@@ -7,11 +7,11 @@ namespace drift {
 // ─── CAMERA HARDWARE CONSTANTS ──────────────────────────────────────────
 
 // Height of the camera lens center from the floor (in meters)
-constexpr float CAMERA_HEIGHT_M = 0.15f; 
+constexpr float CAMERA_HEIGHT_M = 0.05f; 
 
 // Downward tilt angle of the camera (in degrees). 
 // 0 = looking straight at the horizon. 90 = looking straight down at the floor.
-constexpr float CAMERA_PITCH_DEG = 30.0f; 
+constexpr float CAMERA_PITCH_DEG = 15.0f; 
 
 // OV3660 Camera FOV estimation (Tune these based on your specific resolution)
 // If running at 640x480, focal length is roughly equivalent to these:

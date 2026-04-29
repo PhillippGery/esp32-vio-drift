@@ -114,14 +114,23 @@ void fusionTask(void* pvParameters) {
         drift::ekfPredict(data.ax, data.ay, data.gz, data.dt);
 
         // ── ZUPT: Zero-velocity / Zero-rate update ───────────────────────────
-        // When the robot is stationary, gz = thermal bias (true rotation = 0).
-        // Inject this as a bgz measurement so the EKF corrects the bias state.
-        // Dual-sensor confirmation: gyro below noise threshold AND no horizontal
-        // acceleration → confirmed not rotating AND not translating.
+        // Debounced: must be continuously stationary for 300 ms before firing.
+        // Without the debounce, ZUPT fires during the rotation ramp-down (gz still
+        // passing through the threshold), injecting a bgz value that contains real
+        // rotation. The negative P[yaw,bgz] cross-covariance then pulls yaw down,
+        // eating into the correctly integrated angle (observed as 70–80° for 90° turns).
         {
+            static uint32_t stillSinceMs = 0;
+            static bool wasStill = false;
             float acc_h = sqrtf(data.ax * data.ax + data.ay * data.ay);
-            if (acc_h < 0.3f && fabsf(data.gz) < 0.008f) {
-                drift::ekfZupt(data.gz);
+            bool isStill = (acc_h < 0.3f) && (fabsf(data.gz) < 0.008f);
+            if (isStill) {
+                if (!wasStill) { stillSinceMs = millis(); wasStill = true; }
+                if ((millis() - stillSinceMs) > 300) {
+                    drift::ekfZupt(data.gz);
+                }
+            } else {
+                wasStill = false;
             }
         }
 
@@ -153,8 +162,13 @@ void fusionTask(void* pvParameters) {
             // 2. Pass the dt AND the rotation fix into the camera processor
             if (drift::cameraProcessFrame(meas_vx, meas_vy, confidence, cam_dt, delta_yaw_imu)) {
                 last_cam_confidence = confidence;
-                // 3. Fuse the metric, derotated anchor into the physics engine!
-                drift::ekfUpdateCamera(meas_vx, meas_vy, current_yaw, confidence);
+                // Gate: skip camera update during fast rotation. Imperfect de-rotation
+                // produces a spurious translational velocity that, through the yaw↔vx
+                // cross-covariance, pulls the yaw estimate down. 0.2 rad/s ≈ 11 deg/s.
+                bool spinning = fabsf(delta_yaw_imu / cam_dt) > 0.2f;
+                if (!spinning) {
+                    drift::ekfUpdateCamera(meas_vx, meas_vy, current_yaw, confidence);
+                }
             }
 
             // Reset rate-limit AFTER camera returns so we wait CAM_PERIOD_MS

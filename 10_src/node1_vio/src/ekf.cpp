@@ -179,11 +179,9 @@ void ekfZupt(float gz) {
 
     Matrix<3, 3> R;
     R.Fill(0.0f);
-    R(0, 0) = 0.01f;  // vx noise when stationary
-    R(1, 1) = 0.01f;  // vy noise when stationary
-    // Wider than before: bgz converges to the true mean (~120 mdps here) rather
-    // than chasing each noisy gz sample. Frozen value on motion start is stable.
-    R(2, 2) = 0.02f;
+    R(0, 0) = active_config.zupt_r_vel;
+    R(1, 1) = active_config.zupt_r_vel;
+    R(2, 2) = active_config.zupt_r_bgz;
 
     Matrix<3, 1> y = z - H * x;
 

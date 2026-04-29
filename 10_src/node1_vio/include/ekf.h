@@ -21,11 +21,15 @@ struct EkfConfig {
     float q_py  = 0.001f;
     float q_vx  = 0.01f;
     float q_vy  = 0.01f;
-    float q_yaw = 0.005f;
+    float q_yaw = 0.0005f; // lower = trust IMU yaw integration more, less camera pull
     float q_bgz = 0.0001f;
     
     // Measurement Noise (R) - Camera baseline error
     float cam_base_noise = 0.001f;
+
+    // ZUPT Measurement Noise (R) - stationary update
+    float zupt_r_vel  = 0.01f;   // velocity channels (vx, vy) when stationary
+    float zupt_r_bgz  = 0.01f;   // gyro bias channel — wider = smoother convergence
 };
 
 
