@@ -6,9 +6,10 @@ namespace drift {
 class DeadReckoner {
 public:
     // ─── State Variables ───
-    float px, py; // Position (meters)
-    float vx, vy; // Velocity (m/s)
-    float yaw;    // Orientation (radians)
+    float px, py;    // Position (meters)
+    float vx, vy;    // Velocity (m/s)
+    float yaw;       // Orientation (radians)
+    float gz_bias;   // Online gyro bias estimate (rad/s)
 
     // Constructor guarantees we start at zero
     DeadReckoner();

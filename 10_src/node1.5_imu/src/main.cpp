@@ -103,8 +103,9 @@ void fusionTask(void* pvParameters) {
             if (now - lastPrintMs >= PRINT_PERIOD_MS) {
                 lastPrintMs = now;
                 float total_drift = tracker.getDeltaMovement();
-                Serial.printf("Pos: X:%.3f Y:%.3f | Total Delta: %.3f meters | Yaw: %.3f rad\n",
-                              tracker.px, tracker.py, total_drift, tracker.yaw);
+                float bgz_mdps = tracker.gz_bias * (180.0f / M_PI) * 1000.0f;
+                Serial.printf("Pos: X:%.3f Y:%.3f | Delta: %.3f m | Yaw: %.3f rad | bias: %+.2f mdps\n",
+                              tracker.px, tracker.py, total_drift, tracker.yaw, bgz_mdps);
             }
         }
     }
@@ -151,6 +152,7 @@ void setup() {
     imu.calibrate();
     Serial.printf("=== Calibration Complete ===\n");
     Serial.printf("Offsets ax:%.4f ay:%.4f az:%.4f\n", imu.offsetAx, imu.offsetAy, imu.offsetAz);
+    Serial.printf("Gyro offsets gx:%.4f gy:%.4f gz:%.4f mdps\n", imu.offsetGx, imu.offsetGy, imu.offsetGz);
 
     imuQueue = xQueueCreate(20, sizeof(ImuData));
 

@@ -113,6 +113,18 @@ void fusionTask(void* pvParameters) {
         // Drive the physics engine forward
         drift::ekfPredict(data.ax, data.ay, data.gz, data.dt);
 
+        // ── ZUPT: Zero-velocity / Zero-rate update ───────────────────────────
+        // When the robot is stationary, gz = thermal bias (true rotation = 0).
+        // Inject this as a bgz measurement so the EKF corrects the bias state.
+        // Dual-sensor confirmation: gyro below noise threshold AND no horizontal
+        // acceleration → confirmed not rotating AND not translating.
+        {
+            float acc_h = sqrtf(data.ax * data.ax + data.ay * data.ay);
+            if (acc_h < 0.3f && fabsf(data.gz) < 0.008f) {
+                drift::ekfZupt(data.gz);
+            }
+        }
+
         uint32_t now = millis();
 
         // ── Camera capture ───────────────────────────────────────────────────
@@ -158,9 +170,11 @@ void fusionTask(void* pvParameters) {
             drift::ekfGetOrientation(yaw);
             float yaw_deg = yaw * (180.0f / PI);
 
-            Serial.printf("      (last cam meas: vx=%+.3f m/s, vy=%+.3f m/s, conf=%.2f)\n",
-                          last_cam_yaw, last_cam_yaw, last_cam_confidence);
-            Serial.printf("[EKF] X: %8.3f m | Y: %8.3f m | Yaw: %8.3f deg\n", px, py, yaw_deg);
+            float bgz;
+            drift::ekfGetBias(bgz);
+            float bgz_mdps = bgz * (180.0f / PI) * 1000.0f;
+            Serial.printf("[EKF] X:%8.3f m  Y:%8.3f m  Yaw:%8.3f deg  bgz:%+.2f mdps  conf:%.2f\n",
+                          px, py, yaw_deg, bgz_mdps, last_cam_confidence);
         }
 
     }
@@ -199,7 +213,8 @@ void setup() {
     Serial.println("Calibrating — keep sensor still...");
     imu.calibrate();
     Serial.printf("=== Calibration Complete ===\n");
-    Serial.printf("Offsets ax:%.4f ay:%.4f az:%.4f\n",imu.offsetAx, imu.offsetAy, imu.offsetAz);
+    Serial.printf("Offsets ax:%.4f ay:%.4f az:%.4f\n", imu.offsetAx, imu.offsetAy, imu.offsetAz);
+    Serial.printf("Gyro offsets gx:%.4f gy:%.4f gz:%.4f mdps\n", imu.offsetGx, imu.offsetGy, imu.offsetGz);
 
 
 

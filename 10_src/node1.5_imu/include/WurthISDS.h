@@ -9,6 +9,23 @@ extern "C" {
     #include "WSEN_ISDS_2536030320001.h"
 }
 
+template<int N = 5>
+class MovingAvg {
+    float buf[N] = {};
+    int idx = 0;
+    bool full = false;
+public:
+    float update(float val) {
+        buf[idx] = val;
+        idx = (idx + 1) % N;
+        if (idx == 0) full = true;
+        int count = full ? N : idx;
+        float sum = 0;
+        for (int i = 0; i < count; i++) sum += buf[i];
+        return sum / count;
+    }
+};
+
 class WurthISDS {
 public:
     // Calibration offsets
@@ -29,11 +46,12 @@ public:
         delay(50); // Wait for boot
 
         // Set Full Scales and Output Data Rates using the SDK functions
-        ISDS_setAccFullScale(&sensorInterface, ISDS_accFullScaleSixteenG);
+        ISDS_setAccFullScale(&sensorInterface, ISDS_accFullScaleFourG);
         ISDS_setAccOutputDataRate(&sensorInterface, ISDS_accOdr208Hz);
-        
-        ISDS_setGyroFullScale(&sensorInterface, ISDS_gyroFullScale2000dps);
+
+        ISDS_setGyroFullScale(&sensorInterface, ISDS_gyroFullScale250dps);
         ISDS_setGyroOutputDataRate(&sensorInterface, ISDS_gyroOdr208Hz);
+        ISDS_enableGyroDigitalLpf1(&sensorInterface, ISDS_enable);
 
         // Turn on Block Data Update (BDU) for stable reads
         ISDS_enableBlockDataUpdate(&sensorInterface, ISDS_enable);
@@ -46,6 +64,13 @@ public:
         float sumAx = 0, sumAy = 0, sumAz = 0;
         float sumGx = 0, sumGy = 0, sumGz = 0;
         float ax, ay, az, gx, gy, gz;
+
+        // Wait for the sensor to thermally stabilize before collecting bias samples
+        delay(1000);
+        for (int i = 0; i < 100; i++) {
+            readRaw(ax, ay, az, gx, gy, gz);
+            delay(5);
+        }
 
         for (int i = 0; i < samples; i++) {
             readRaw(ax, ay, az, gx, gy, gz);
@@ -90,10 +115,9 @@ public:
             ay = (ay / 1000.0f) * 9.81f;
             az = (az / 1000.0f) * 9.81f;
 
-            // 3. Convert to rad/s
             gx = (gx / 1000.0f) * (PI / 180.0f);
             gy = (gy / 1000.0f) * (PI / 180.0f);
-            gz = (gz / 1000.0f) * (PI / 180.0f);
+            gz = _fgz.update((gz / 1000.0f) * (PI / 180.0f));
 
             return true;
         }
@@ -101,6 +125,8 @@ public:
     }
 
 private:
+    MovingAvg<5> _fgz;
+
     void readRaw(float &ax, float &ay, float &az, float &gx, float &gy, float &gz) {
         // Use the driver's float conversion functions
         ISDS_getAccelerations_float(&sensorInterface, &ax, &ay, &az);
