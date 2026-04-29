@@ -100,8 +100,9 @@ void fusionTask(void* pvParameters) {
             if (now - lastPrintMs >= PRINT_PERIOD_MS) {
                 lastPrintMs = now;
                 float total_drift = tracker.getDeltaMovement();
-                Serial.printf("Pos: X:%.3f Y:%.3f | Total Delta: %.3f meters | Yaw: %.3f rad\n",
-                              tracker.px, tracker.py, total_drift, tracker.yaw);
+                float bgz_mdps = tracker.gz_bias * (180.0f / M_PI) * 1000.0f;
+                Serial.printf("Pos: X:%.3f Y:%.3f | Delta: %.3f m | Yaw: %.3f rad | bias: %+.2f mdps\n",
+                              tracker.px, tracker.py, total_drift, tracker.yaw, bgz_mdps);
             }
         }
     }

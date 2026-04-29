@@ -28,38 +28,29 @@ public:
 
 class WurthISDS {
 public:
-    // Calibration offsets
     float offsetAx = 0.0f, offsetAy = 0.0f, offsetAz = 0.0f;
     float offsetGx = 0.0f, offsetGy = 0.0f, offsetGz = 0.0f;
 
     WE_sensorInterface_t sensorInterface;
 
     bool begin() {
-        // Initialize the default sensor interface from the driver
         ISDS_getDefaultInterface(&sensorInterface);
-        
-        // Ensure standard I2C address is set (0x6B by default on the EV board)
-        sensorInterface.options.i2c.address = ISDS_ADDRESS_I2C_1; // Note: I2C_1 is 0x6B, I2C_0 is 0x6A
+        sensorInterface.options.i2c.address = ISDS_ADDRESS_I2C_1; 
 
-        // Soft reset the sensor
         ISDS_softReset(&sensorInterface, ISDS_enable);
         delay(50); // Wait for boot
 
-        // Set Full Scales and Output Data Rates using the SDK functions
         ISDS_setAccFullScale(&sensorInterface, ISDS_accFullScaleFourG);
         ISDS_setAccOutputDataRate(&sensorInterface, ISDS_accOdr208Hz);
-
+        
         ISDS_setGyroFullScale(&sensorInterface, ISDS_gyroFullScale250dps);
         ISDS_setGyroOutputDataRate(&sensorInterface, ISDS_gyroOdr208Hz);
         ISDS_enableGyroDigitalLpf1(&sensorInterface, ISDS_enable);
 
-        // Turn on Block Data Update (BDU) for stable reads
         ISDS_enableBlockDataUpdate(&sensorInterface, ISDS_enable);
-
         return true;
     }
 
-    // --- CALIBRATION ROUTINE ---
     void calibrate(int samples = 500) {
         float sumAx = 0, sumAy = 0, sumAz = 0;
         float sumGx = 0, sumGy = 0, sumGz = 0;
@@ -80,13 +71,11 @@ public:
             sumGx += gx;
             sumGy += gy;
             sumGz += gz;
-            delay(5); // Wait roughly 1 period at 200Hz
+            delay(5); 
         }
 
-        // Calculate averages
         offsetAx = sumAx / samples;
         offsetAy = sumAy / samples;
-        // Gravity is typically 1g (1000mg) on the Z axis assuming it is flat on a table
         offsetAz = (sumAz / samples) - 1000.0f; 
         
         offsetGx = sumGx / samples;
@@ -95,14 +84,13 @@ public:
     }
 
     bool read(float &ax, float &ay, float &az, float &gx, float &gy, float &gz) {
-        // Check if data is ready using the driver's status register function
         ISDS_state_t accReady, gyroReady;
         ISDS_isDataReady(&sensorInterface, NULL, &accReady, &gyroReady);
         
         if (accReady == ISDS_enable && gyroReady == ISDS_enable) {
             readRaw(ax, ay, az, gx, gy, gz);
             
-            // 1. Apply calibration offsets (calculated in mg and mdps)
+            // Subtract offsets
             ax -= offsetAx;
             ay -= offsetAy;
             az -= offsetAz;
@@ -110,7 +98,6 @@ public:
             gy -= offsetGy;
             gz -= offsetGz;
             
-            // 2. Convert to m/s^2 (matching ekf.cpp gravity exactly)
             ax = (ax / 1000.0f) * 9.81f;
             ay = (ay / 1000.0f) * 9.81f;
             az = (az / 1000.0f) * 9.81f;
@@ -128,15 +115,11 @@ private:
     MovingAvg<5> _fgz;
 
     void readRaw(float &ax, float &ay, float &az, float &gx, float &gy, float &gz) {
-        // Use the driver's float conversion functions
         ISDS_getAccelerations_float(&sensorInterface, &ax, &ay, &az);
         ISDS_getAngularRates_float(&sensorInterface, &gx, &gy, &gz);
     }
 };
 
-// --- REQUIRED PLATFORM FUNCTIONS ---
-// The Würth C SDK expects these functions to be implemented in your project 
-// to handle the actual hardware I2C transmission.
 extern "C" {
     int8_t WE_ReadReg(WE_sensorInterface_t* interface, uint8_t regAdr, uint16_t numBytesToRead, uint8_t* data) {
         Wire.beginTransmission(interface->options.i2c.address);

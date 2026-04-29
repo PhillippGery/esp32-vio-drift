@@ -57,11 +57,26 @@ void ekfGetPosition(float &px, float &py);
  */
 void ekfGetOrientation(float &yaw);
 
+/**
+ * @brief Retrieves the current gyro bias estimate (rad/s). Use for diagnostics
+ * to verify ZUPT is converging — should approach the residual thermal offset.
+ */
+void ekfGetBias(float &bgz);
+
 
 /**
  * @brief Forces the state vector back to absolute zero and resets uncertainty.
  * Use this after hardware initialization or when recovering from a crash.
  */
 void ekfReset();
+
+/**
+ * @brief Zero-velocity / Zero-rate update (ZUPT).
+ * Call when the robot is confirmed stationary. Directly corrects the gyro
+ * bias state (bgz) and drives velocity to zero. This is the primary mechanism
+ * for compensating thermal gyro drift — when still, gz = bgz (true rate = 0).
+ * @param gz The current filtered gz reading in rad/s.
+ */
+void ekfZupt(float gz);
 
 } // namespace drift

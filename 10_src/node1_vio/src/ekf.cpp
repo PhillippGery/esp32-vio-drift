@@ -153,15 +153,51 @@ void ekfGetOrientation(float &yaw) {
     yaw = x(4);
 }
 
-void ekfReset() {
-    // Force the state vector back to origin and zero velocity
-    x.Fill(0.0f);
+void ekfGetBias(float &bgz) {
+    bgz = x(5);
+}
 
-    // Reset the Covariance Matrix (P) back to its initial uncertainty
+void ekfReset() {
+    x.Fill(0.0f);
     P.Fill(0.0f);
     for (int i = 0; i < STATE_DIM; i++) {
-        P(i, i) = active_config.p_init; 
+        P(i, i) = active_config.p_init;
     }
+}
+
+void ekfZupt(float gz) {
+    // ZUPT: robot is stationary → true rotation rate = 0 → gz IS the thermal bias.
+    // Measurement vector: [vx=0, vy=0, bgz=gz]
+    // H observes state indices [2=vx, 3=vy, 5=bgz] directly.
+    Matrix<3, 1> z = {0.0f, 0.0f, gz};
+
+    Matrix<3, STATE_DIM> H;
+    H.Fill(0.0f);
+    H(0, 2) = 1.0f; // vx
+    H(1, 3) = 1.0f; // vy
+    H(2, 5) = 1.0f; // bgz ← this column was never observed in ekfUpdateCamera
+
+    Matrix<3, 3> R;
+    R.Fill(0.0f);
+    R(0, 0) = 0.01f;  // vx noise when stationary
+    R(1, 1) = 0.01f;  // vy noise when stationary
+    // Wider than before: bgz converges to the true mean (~120 mdps here) rather
+    // than chasing each noisy gz sample. Frozen value on motion start is stable.
+    R(2, 2) = 0.02f;
+
+    Matrix<3, 1> y = z - H * x;
+
+    Matrix<3, 3> S = H * P * (~H) + R;
+    Matrix<3, 3> S_inv;
+    if (!Invert(S, S_inv)) return;
+
+    Matrix<STATE_DIM, 3> K = P * (~H) * S_inv;
+    x += K * y;
+
+    Matrix<STATE_DIM, STATE_DIM> I;
+    I.Fill(0.0f);
+    for (int i = 0; i < STATE_DIM; i++) I(i, i) = 1.0f;
+    P = (I - K * H) * P;
 }
 
 } // namespace drift
