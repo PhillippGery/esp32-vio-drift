@@ -75,12 +75,29 @@ void ekfGetBias(float &bgz);
 void ekfReset();
 
 /**
- * @brief Zero-velocity / Zero-rate update (ZUPT).
- * Call when the robot is confirmed stationary. Directly corrects the gyro
- * bias state (bgz) and drives velocity to zero. This is the primary mechanism
- * for compensating thermal gyro drift — when still, gz = bgz (true rate = 0).
+ * @brief Zero-velocity update (velocity channels only, no bgz).
+ * Use during the 300–1500 ms window after motion stops, before the
+ * yaw–bgz cross-covariance has had time to decay.
+ */
+void ekfZuptVelocity();
+
+/**
+ * @brief Full Zero-velocity / Zero-rate update (ZUPT).
+ * Call when the robot is confirmed stationary for >1500 ms.
  * @param gz The current filtered gz reading in rad/s.
  */
 void ekfZupt(float gz);
+
+/**
+ * @brief Zeroes the motion-history cross-covariances between yaw and
+ * {vx, vy, bgz} in P. Call exactly once when the robot transitions from
+ * motion to rest, just before the first ZUPT fires.
+ *
+ * These cross-covariances accumulate during rotation and cause subsequent
+ * ZUPT corrections to retroactively corrupt the correctly integrated yaw.
+ * Zeroing them tells the filter: "the past yaw integral was correct;
+ * bgz/velocity corrections should only affect future integration."
+ */
+void ekfDecoupleOnStop();
 
 } // namespace drift

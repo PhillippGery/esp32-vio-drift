@@ -114,20 +114,39 @@ void fusionTask(void* pvParameters) {
         drift::ekfPredict(data.ax, data.ay, data.gz, data.dt);
 
         // ── ZUPT: Zero-velocity / Zero-rate update ───────────────────────────
-        // Debounced: must be continuously stationary for 300 ms before firing.
-        // Without the debounce, ZUPT fires during the rotation ramp-down (gz still
-        // passing through the threshold), injecting a bgz value that contains real
-        // rotation. The negative P[yaw,bgz] cross-covariance then pulls yaw down,
-        // eating into the correctly integrated angle (observed as 70–80° for 90° turns).
+        // Two-phase approach to prevent P[yaw,bgz] cross-covariance (built during
+        // rotation) from retroactively corrupting the integrated yaw when bgz is
+        // corrected:
+        //
+        //   Phase 0 (<300 ms still): no ZUPT — rotation may still be decelerating.
+        //   Phase 1 (300–1500 ms still): velocity-only ZUPT (vx, vy → 0).
+        //       ekfDecoupleOnStop() is called once at the phase 0→1 boundary to
+        //       zero P[yaw,vx/vy/bgz] before any correction touches yaw.
+        //   Phase 2 (>1500 ms still): full ZUPT (vx, vy, bgz) — by now the
+        //       cross-covariances have decayed and bgz correction is safe.
         {
-            static uint32_t stillSinceMs = 0;
-            static bool wasStill = false;
+            static uint32_t stillSinceMs   = 0;
+            static bool     wasStill       = false;
+            static bool     decoupledOnStop = false;
             float acc_h = sqrtf(data.ax * data.ax + data.ay * data.ay);
             bool isStill = (acc_h < 0.3f) && (fabsf(data.gz) < 0.008f);
             if (isStill) {
-                if (!wasStill) { stillSinceMs = millis(); wasStill = true; }
-                if ((millis() - stillSinceMs) > 300) {
-                    drift::ekfZupt(data.gz);
+                if (!wasStill) {
+                    stillSinceMs    = millis();
+                    wasStill        = true;
+                    decoupledOnStop = false;
+                }
+                uint32_t stillMs = millis() - stillSinceMs;
+                if (stillMs > 300) {
+                    if (!decoupledOnStop) {
+                        drift::ekfDecoupleOnStop();
+                        decoupledOnStop = true;
+                    }
+                    if (stillMs > 1500) {
+                        drift::ekfZupt(data.gz);       // Phase 2: vx + vy + bgz
+                    } else {
+                        drift::ekfZuptVelocity();      // Phase 1: vx + vy only
+                    }
                 }
             } else {
                 wasStill = false;
@@ -165,7 +184,7 @@ void fusionTask(void* pvParameters) {
                 // Gate: skip camera update during fast rotation. Imperfect de-rotation
                 // produces a spurious translational velocity that, through the yaw↔vx
                 // cross-covariance, pulls the yaw estimate down. 0.2 rad/s ≈ 11 deg/s.
-                bool spinning = fabsf(delta_yaw_imu / cam_dt) > 0.2f;
+                bool spinning = fabsf(delta_yaw_imu / cam_dt) > 0.5f;
                 if (!spinning) {
                     drift::ekfUpdateCamera(meas_vx, meas_vy, current_yaw, confidence);
                 }

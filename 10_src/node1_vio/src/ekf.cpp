@@ -165,6 +165,41 @@ void ekfReset() {
     }
 }
 
+void ekfZuptVelocity() {
+    Matrix<2, 1> z = {0.0f, 0.0f};
+    Matrix<2, STATE_DIM> H;
+    H.Fill(0.0f);
+    H(0, 2) = 1.0f; // vx
+    H(1, 3) = 1.0f; // vy
+
+    Matrix<2, 2> R;
+    R.Fill(0.0f);
+    R(0, 0) = active_config.zupt_r_vel;
+    R(1, 1) = active_config.zupt_r_vel;
+
+    Matrix<2, 1> y = z - H * x;
+    Matrix<2, 2> S = H * P * (~H) + R;
+    Matrix<2, 2> S_inv;
+    if (!Invert(S, S_inv)) return;
+
+    Matrix<STATE_DIM, 2> K = P * (~H) * S_inv;
+    x += K * y;
+
+    Matrix<STATE_DIM, STATE_DIM> I;
+    I.Fill(0.0f);
+    for (int i = 0; i < STATE_DIM; i++) I(i, i) = 1.0f;
+    P = (I - K * H) * P;
+}
+
+void ekfDecoupleOnStop() {
+    // Break the yaw cross-covariances that accumulate during rotation.
+    // These couple post-stop ZUPT corrections back into the already-correct
+    // integrated yaw. Called once at the motion→rest transition.
+    P(4, 2) = P(2, 4) = 0.0f; // yaw ↔ vx
+    P(4, 3) = P(3, 4) = 0.0f; // yaw ↔ vy
+    P(4, 5) = P(5, 4) = 0.0f; // yaw ↔ bgz
+}
+
 void ekfZupt(float gz) {
     // ZUPT: robot is stationary → true rotation rate = 0 → gz IS the thermal bias.
     // Measurement vector: [vx=0, vy=0, bgz=gz]
