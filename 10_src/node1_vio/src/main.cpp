@@ -81,7 +81,7 @@ void imuTask(void* pvParameters) {
 
         uint32_t now = millis();
         float dt = (now - lastReadMs) / 1000.0f;
-        lastReadMs = now;
+        //lastReadMs = now;
 
         float ax, ay, az, gx, gy, gz;
 
@@ -89,9 +89,19 @@ void imuTask(void* pvParameters) {
         if (imu.read(ax, ay, az, gx, gy, gz)) {
             // CRITICAL: Convert gyroscope Z from degrees/s to radians/s
             //float gz_rad = gz * (PI / 180.0f);
-
+            //Serial.printf("Raw Gyro Z (deg/s): %.2f\n", gz * (180.0f / PI));
+            lastReadMs = now;
             ImuData data = { ax, ay, gz, dt };
-            xQueueSend(imuQueue, &data, 0); // non-blocking: drop if full
+            if (xQueueSend(imuQueue, &data, 0) != pdTRUE) {
+                // Queue is full; this should be rare since fusionTask is higher priority and should drain it fast.
+                // If this happens frequently, consider increasing the queue size or optimizing fusionTask.
+                static uint32_t lastDropWarn = 0;
+                if (now - lastDropWarn > 1000) { // Rate-limit warnings to
+                Serial.println("[WARNING] imuQueue full! IMU data dropped.");
+                lastDropWarn = millis();
+                }
+            }
+            //xQueueSend(imuQueue, &data, 0); // non-blocking: drop if full
         }
     }
 }
@@ -106,13 +116,14 @@ void fusionTask(void* pvParameters) {
     uint32_t lastCamCaptureMs = millis(); // true inter-frame dt for velocity computation
     uint32_t lastPrintMs      = millis();
 
+
     for (;;) {
         ImuData data;
         xQueueReceive(imuQueue, &data, portMAX_DELAY);
-
+        
         // Drive the physics engine forward
         drift::ekfPredict(data.ax, data.ay, data.gz, data.dt);
-
+        
         // ── ZUPT: Zero-velocity / Zero-rate update ───────────────────────────
         // Two-phase approach to prevent P[yaw,bgz] cross-covariance (built during
         // rotation) from retroactively corrupting the integrated yaw when bgz is
@@ -129,7 +140,7 @@ void fusionTask(void* pvParameters) {
             static bool     wasStill       = false;
             static bool     decoupledOnStop = false;
             float acc_h = sqrtf(data.ax * data.ax + data.ay * data.ay);
-            bool isStill = (acc_h < 0.3f) && (fabsf(data.gz) < 0.008f);
+            bool isStill = (acc_h < 0.3f) && (fabsf(data.gz) < 0.015f);
             if (isStill) {
                 if (!wasStill) {
                     stillSinceMs    = millis();
@@ -278,13 +289,14 @@ void setup() {
     // TODO (Phillipp): EKF init
 // Initialize Kalman Filter Matrices
     drift::ekfInit();
-    delay(200);
-    drift::ekfGetOrientation(initial_yaw);
-    Serial.println("[NODE 1] EKF Initialized.");
     drift::ekfReset();
+    drift::ekfSetInitialBias(imu.residualGz);
+        Serial.printf("[NODE 1] EKF seeded bgz: %.2f mdps\n",
+                imu.residualGz * (180.0f / PI) * 1000.0f);
+        Serial.println("[NODE 1] EKF Initialized.");
 
     // Create the inter-core queue before spawning tasks
-    imuQueue = xQueueCreate(20, sizeof(ImuData));
+    imuQueue = xQueueCreate(30, sizeof(ImuData));
 
     // Spawn tasks — imuTask on Core 0, fusion + telemetry on Core 1
     xTaskCreatePinnedToCore(imuTask,    "imuTask",    4096, nullptr, 5, nullptr, 0);
@@ -303,3 +315,7 @@ void setup() {
 void loop() {
     vTaskDelete(nullptr);
 }
+// changes in setup() to seed EKF with initial bias guess from IMU calibration, and to call ekfReset() after seeding to prevent the initial bias from being immediately overwritten by the reset's zeroing of all states including bgz:
+//drift::ekfInit();
+//drift::ekfReset();
+//drift::ekfSetInitialBias(imu.residualGz);  // seed after reset
