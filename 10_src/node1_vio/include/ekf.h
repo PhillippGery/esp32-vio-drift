@@ -22,7 +22,7 @@ struct EkfConfig {
     float q_vx  = 0.01f;
     float q_vy  = 0.01f;
     float q_yaw = 0.0005f; // lower = trust IMU yaw integration more, less camera pull
-    float q_bgz = 1e-8f;
+    float q_bgz = 0.00001f;
     
     // Measurement Noise (R) - Camera baseline error
     float cam_base_noise = 0.001f;
