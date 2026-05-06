@@ -183,12 +183,12 @@ class Integrator:
 # ---------------------------------------------------------------------------
 
 plt.rcParams.update({
-    "font.family":    "Franklin Gothic Medium",
-    "text.color":     "#E0E0E0",
-    "axes.labelcolor":"#E0E0E0",
-    "xtick.color":    "#B0B0B0",
-    "ytick.color":    "#B0B0B0",
-    "axes.facecolor": "#2B2B2B",
+    # "font.family":     "Franklin Gothic Medium",
+    "text.color":      "#E0E0E0",
+    "axes.labelcolor": "#E0E0E0",
+    "xtick.color":     "#B0B0B0",
+    "ytick.color":     "#B0B0B0",
+    "axes.facecolor":  "#2B2B2B",
     "figure.facecolor":"#1E1E1E",
 })
 
@@ -198,114 +198,139 @@ class DRIFTVisualizer:
         self.queue      = packet_queue
         self.integrator = Integrator()
 
-        # ── Layout ──────────────────────────────────────────────────────────
+        # ── Layout: 4 rows × 4 cols ──────────────────────────────────────────
+        #   col 0-1 : full-height trajectory
+        #   col 2   : row 0 accel | row 1 gyro | row 2 velocity | row 3 temp
+        #   col 3   : full-height metrics text panel
         self.fig = plt.figure(figsize=(16, 9), facecolor="#1E1E1E")
-        self.gs  = self.fig.add_gridspec(3, 4, wspace=0.3, hspace=0.4)
+        self.gs  = self.fig.add_gridspec(4, 4, wspace=0.32, hspace=0.45)
 
         self.ax_traj    = self.fig.add_subplot(self.gs[:, 0:2])
         self.ax_accel   = self.fig.add_subplot(self.gs[0, 2])
         self.ax_gyro    = self.fig.add_subplot(self.gs[1, 2])
         self.ax_vel     = self.fig.add_subplot(self.gs[2, 2])
+        self.ax_temp    = self.fig.add_subplot(self.gs[3, 2])
         self.ax_metrics = self.fig.add_subplot(self.gs[:, 3])
         self.ax_metrics.axis("off")
 
-        # ── Trajectory paths ────────────────────────────────────────────────
-        self.path  = {"x": [], "y": []}
+        # ── Trajectory path ──────────────────────────────────────────────────
+        self.path = {"x": [], "y": []}
 
-        # ── Rolling history buffers (last N samples) ─────────────────────
+        # ── Rolling history buffers ──────────────────────────────────────────
+        # Deques grow from empty, so every plotted sample is real data.
+        # Each entry holds only the X/Y components (Z removed).
         self.buf_len = 100
-        self.a_buf   = np.zeros((self.buf_len, 3))   # accelerometer
-        self.g_buf   = np.zeros((self.buf_len, 3))   # gyroscope
-        self.v_buf   = np.zeros((self.buf_len, 3))   # integrated velocity
+        self.a_buf = deque(maxlen=self.buf_len)   # [ax, ay]
+        self.g_buf = deque(maxlen=self.buf_len)   # [gx, gy]
+        self.v_buf = deque(maxlen=self.buf_len)   # [vx, vy]
+        self.t_buf = deque(maxlen=self.buf_len)   # float °C (skips None entries)
 
-        # ── Counters / last-known values ─────────────────────────────────
-        self.total_dist  = 0.0
-        self.pkt_count   = 0
-        self.last_packet: dict = {}
-        self.last_temp: float | None = None   # most-recent temperature reading (°C)
+        # ── Counters / last-known values ─────────────────────────────────────
+        self.total_dist = 0.0
+        self.pkt_count  = 0
+        self.last_temp: float | None = None
 
-        # ── Status line in window title ──────────────────────────────────
+        # ── Window title ─────────────────────────────────────────────────────
         self.fig.canvas.manager.set_window_title("DRIFT – Waiting for packets…")
 
-    # ── Drain the queue and integrate all waiting packets ─────────────────
+    # ── Drain the queue and integrate all waiting packets ─────────────────────
 
     def _drain_queue(self):
         """
         Process every packet that arrived since the last animation frame.
-        Returns the most-recent parsed state, or None if the queue is empty.
+        Returns the most-recent parsed state dict, or None if the queue was empty.
         """
         latest = None
         while self.queue:
             pkt = self.queue.popleft()
             self.pkt_count += 1
 
-            ax = float(pkt.get("ax") or 0)
-            ay = float(pkt.get("ay") or 0)
-            az = float(pkt.get("az") or 0)
-            gx = float(pkt.get("gx") or 0)
-            gy = float(pkt.get("gy") or 0)
-            gz = float(pkt.get("gz") or 0)
-            ts = float(pkt.get("ts") or 0)
+            # Explicit None-check: genuine 0.0 readings are preserved, not coerced.
+            def _f(key):
+                v = pkt.get(key)
+                return float(v) if v is not None else 0.0
 
-            # Temperature is optional; keep the last known value if absent
+            ax_v = _f("ax")
+            ay_v = _f("ay")
+            az_v = _f("az")
+            gx_v = _f("gx")
+            gy_v = _f("gy")
+            # gz kept for integrator input but not buffered for display
+            gz_v = _f("gz")   # noqa: F841
+            ts_v = _f("ts")
+
             raw_temp = pkt.get("temp")
             if raw_temp is not None:
                 self.last_temp = float(raw_temp)
 
-            pos, vel = self.integrator.update(ax, ay, az, ts)
+            pos, vel = self.integrator.update(ax_v, ay_v, az_v, ts_v)
 
-            # Accumulate distance
+            # Accumulate XY distance
             if self.path["x"]:
                 dx = pos[0] - self.path["x"][-1]
                 dy = pos[1] - self.path["y"][-1]
-                self.total_dist += np.sqrt(dx*dx + dy*dy)
+                self.total_dist += np.sqrt(dx * dx + dy * dy)
 
             self.path["x"].append(pos[0])
             self.path["y"].append(pos[1])
 
-            # Roll buffers
-            for buf, vec in ((self.a_buf, [ax, ay, az]),
-                             (self.g_buf, [gx, gy, gz]),
-                             (self.v_buf, vel)):
-                buf[:] = np.roll(buf, -1, axis=0)
-                buf[-1] = vec
+            # Append X/Y components only; temperature only when present
+            self.a_buf.append([ax_v, ay_v])
+            self.g_buf.append([gx_v, gy_v])
+            self.v_buf.append([vel[0], vel[1]])
+            if self.last_temp is not None:
+                self.t_buf.append(self.last_temp)
 
-            latest = dict(pos=pos, vel=vel,
-                          accel=[ax, ay, az], gyro=[gx, gy, gz],
-                          temp=self.last_temp,
-                          node=pkt.get("node"), ts=ts,
-                          source=pkt.get("_source_ip", "?"))
+            latest = dict(
+                pos=pos, vel=vel,
+                accel=[ax_v, ay_v],
+                gyro=[gx_v, gy_v],
+                temp=self.last_temp,
+                node=pkt.get("node"),
+                ts=ts_v,
+                source=pkt.get("_source_ip", "?"),
+            )
         return latest
 
-    # ── FuncAnimation callback ─────────────────────────────────────────────
+    # ── Helper: unpack a deque of 2-element rows into two numpy arrays ─────────
+
+    @staticmethod
+    def _cols(buf):
+        """Return (col0_array, col1_array) from a deque of [x, y] rows."""
+        if not buf:
+            return np.array([]), np.array([])
+        arr = np.array(buf)      # shape (N, 2)
+        return arr[:, 0], arr[:, 1]
+
+    # ── FuncAnimation callback ─────────────────────────────────────────────────
 
     def update(self, _frame):
         state = self._drain_queue()
 
         if state is None:
-            # No new data – update title and return without redrawing
             self.fig.canvas.manager.set_window_title(
                 f"DRIFT – waiting… ({self.pkt_count} received)")
             return
 
         pos   = state["pos"]
         vel   = state["vel"]
-        accel = state["accel"]
-        gyro  = state["gyro"]
+        accel = state["accel"]   # [ax, ay]
+        gyro  = state["gyro"]    # [gx, gy]
         temp  = state["temp"]
         node  = state["node"]
         src   = state["source"]
+        speed = float(np.linalg.norm(vel[:2]))  # XY speed
 
         self.fig.canvas.manager.set_window_title(
             f"DRIFT – node={node}  src={src}  pkts={self.pkt_count}")
 
-        # ── Trajectory ────────────────────────────────────────────────────
+        # ── Trajectory ─────────────────────────────────────────────────────
         self.ax_traj.cla()
+        self.ax_traj.set_facecolor("#2B2B2B")
         self.ax_traj.set_title("2D Trajectory (X-Y Plane)", color="#00FFCC", fontsize=14)
         self.ax_traj.plot(self.path["x"], self.path["y"],
                           color="#00FFCC", linewidth=2, label=f"Node {node}")
-        # Mark start
-        if len(self.path["x"]) >= 1:
+        if self.path["x"]:
             self.ax_traj.plot(self.path["x"][0], self.path["y"][0],
                               "o", color="#FFAA00", markersize=6, label="Start")
         self.ax_traj.set_xlabel("X (m)")
@@ -313,41 +338,51 @@ class DRIFTVisualizer:
         self.ax_traj.legend(facecolor="#1E1E1E", edgecolor="#444444", loc="lower right")
         self.ax_traj.grid(True, color="#333333")
 
-        # ── Telemetry subplots ────────────────────────────────────────────
-        plots = [
+        # ── Telemetry subplots (X & Y only) ────────────────────────────────
+        xy_plots = [
             (self.ax_accel, self.a_buf,
-             f"Accel (m/s²) | az={accel[2]:.2f}",
-             ["#FF5555", "#55FF55", "#5555FF"],
-             ["ax", "ay", "az"]),
+             f"Accel (m/s²)  ax={accel[0]:.2f}  ay={accel[1]:.2f}",
+             ["#FF5555", "#55FF55"], ["ax", "ay"]),
+
             (self.ax_gyro, self.g_buf,
-             f"Gyro (rad/s) | gz={gyro[2]:.3f}",
-             ["#FFAA00", "#AAFF00", "#00AAFF"],
-             ["gx", "gy", "gz"]),
+             f"Gyro (rad/s)  gx={gyro[0]:.3f}  gy={gyro[1]:.3f}",
+             ["#FFAA00", "#AAFF00"], ["gx", "gy"]),
+
             (self.ax_vel, self.v_buf,
-             f"Velocity (m/s) | |v|={np.linalg.norm(vel):.2f}",
-             ["#FF00FF", "#00FFFF", "#FFFF00"],
-             ["vx", "vy", "vz"]),
+             f"Velocity (m/s)  |v|={speed:.2f}",
+             ["#FF00FF", "#00FFFF"], ["vx", "vy"]),
         ]
 
-        for ax, data, title, colors, labels in plots:
-            ax.cla()
-            ax.set_title(title, loc="left", fontsize=10)
-            for i in range(3):
-                ax.plot(data[:, i], color=colors[i], alpha=0.8, label=labels[i])
-            ax.legend(facecolor="#1E1E1E", edgecolor="#333333",
-                      fontsize=7, loc="upper left")
-            ax.grid(True, color="#333333", alpha=0.5)
+        for subplot_ax, buf, title, colors, labels in xy_plots:
+            subplot_ax.cla()
+            subplot_ax.set_facecolor("#2B2B2B")
+            subplot_ax.set_title(title, loc="left", fontsize=9)
+            c0, c1 = self._cols(buf)
+            if c0.size:
+                subplot_ax.plot(c0, color=colors[0], alpha=0.9, label=labels[0])
+                subplot_ax.plot(c1, color=colors[1], alpha=0.9, label=labels[1])
+            subplot_ax.legend(facecolor="#1E1E1E", edgecolor="#333333",
+                              fontsize=7, loc="upper left")
+            subplot_ax.grid(True, color="#333333", alpha=0.5)
 
-        # self.ax_traj.set_aspect('equal', 'box')
-
-        # ── Metrics panel ─────────────────────────────────────────────────
-        speed = np.linalg.norm(vel)
+        # ── Temperature subplot ─────────────────────────────────────────────
+        self.ax_temp.cla()
+        self.ax_temp.set_facecolor("#2B2B2B")
         temp_str = f"{temp:.2f} °C" if temp is not None else "N/A"
+        self.ax_temp.set_title(f"Temperature  {temp_str}", loc="left", fontsize=9)
+        if self.t_buf:
+            self.ax_temp.plot(list(self.t_buf), color="#FF8C00",
+                              alpha=0.9, linewidth=1.5, label="temp (°C)")
+            self.ax_temp.legend(facecolor="#1E1E1E", edgecolor="#333333",
+                                fontsize=7, loc="upper left")
+        self.ax_temp.set_ylabel("°C", fontsize=8)
+        self.ax_temp.grid(True, color="#333333", alpha=0.5)
 
+        # ── Metrics panel ───────────────────────────────────────────────────
         self.ax_metrics.cla()
         self.ax_metrics.axis("off")
         self.ax_metrics.text(
-            0.05, 0.95,
+            0.05, 0.97,
             (
                 f"LIVE TELEMETRY\n"
                 f"{'='*25}\n"
@@ -358,31 +393,27 @@ class DRIFTVisualizer:
                 f"POSITION\n"
                 f"{'='*25}\n"
                 f"px: {pos[0]:>8.3f} m\n"
-                f"py: {pos[1]:>8.3f} m\n"
-                f"pz: {pos[2]:>8.3f} m\n\n"
+                f"py: {pos[1]:>8.3f} m\n\n"
                 f"VELOCITY\n"
                 f"{'='*25}\n"
                 f"vx: {vel[0]:>8.3f} m/s\n"
                 f"vy: {vel[1]:>8.3f} m/s\n"
-                f"vz: {vel[2]:>8.3f} m/s\n"
                 f"|v|:{speed:>8.3f} m/s\n\n"
                 f"ACCELEROMETER\n"
                 f"{'='*25}\n"
                 f"ax: {accel[0]:>8.3f}\n"
-                f"ay: {accel[1]:>8.3f}\n"
-                f"az: {accel[2]:>8.3f}\n\n"
+                f"ay: {accel[1]:>8.3f}\n\n"
                 f"GYROSCOPE\n"
                 f"{'='*25}\n"
                 f"gx: {gyro[0]:>8.4f}\n"
-                f"gy: {gyro[1]:>8.4f}\n"
-                f"gz: {gyro[2]:>8.4f}\n\n"
+                f"gy: {gyro[1]:>8.4f}\n\n"
                 f"TEMPERATURE\n"
                 f"{'='*25}\n"
                 f"temp: {temp_str}"
             ),
             transform=self.ax_metrics.transAxes,
             va="top", fontsize=10, color="#00FFCC",
-            family="Franklin Gothic Medium",
+            # family="Franklin Gothic Medium",
         )
 
     def run(self):
