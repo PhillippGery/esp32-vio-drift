@@ -306,6 +306,19 @@ bool cameraProcessFrame(float &dx, float &dy, float &confidence) {
     return measurement_ready;
 }
 
+int n_final = fast_nms(corners, n_raw, NMS_RADIUS);
+
+// Gate: not enough corners for reliable tracking
+if (n_final < 8) {
+    ESP_LOGW(TAG, "Low corners (%d) — skipping frame", n_final);
+    // Still update prev_frame so we don't stall the pipeline
+    memcpy(prev_frame, fb->buf, FRAME_BYTES);
+    prev_n_corners = 0;  // Force no flow on next frame
+    has_prev_frame = true;
+    esp_camera_fb_return(fb);
+    return false;
+}
+
 void cameraDebugCheck() {
     if (!Serial.available()) return;
     char cmd = Serial.read();
