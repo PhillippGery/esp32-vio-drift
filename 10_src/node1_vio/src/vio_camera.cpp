@@ -1,15 +1,16 @@
 //panchitos space
 //
-// Camera outputs to EKF:
-//   - Direction (FORWARD, LEFT, RIGHT, UP, DOWN, BACKWARD, STATIONARY)
-//   - Raw pixel displacement (lateral_dx, lateral_dy, radial_total)
-//   - Confidence (0.0 - 1.0)
-//
-// The camera does NOT output meters. The IMU provides scale.
-// The EKF fuses camera direction with IMU distance.
+// STABILIZED VERSION — All fixes included:
+//   - Corner gate: skip frame if < 8 corners (Vedant's dark room fix)
+//   - Per-vector noise filter: ignores sub-pixel jitter (< 0.5px)
+//   - Per-frame dead zone: clamps tiny motion to zero (< 0.3px)
+//   - Final threshold: STATIONARY unless total > 2.0px
+//   - Corner count in confidence: low corners = low confidence
+//   - 4 directions only: FORWARD, BACKWARD, LEFT, RIGHT, STATIONARY
+//   - No meter output: camera gives direction + pixels + confidence
 //
 // SERIAL COMMANDS:
-//   't' = Manual test mode (step-by-step capture with frame saving)
+//   't' = Manual test mode (step-by-step with frame saving)
 //   'r' = Reset accumulator
 
 #include "vio_camera.h"
@@ -50,26 +51,30 @@ static float test_lat_dx[ACCUM_WINDOW];
 static float test_lat_dy[ACCUM_WINDOW];
 static float test_radial[ACCUM_WINDOW];
 static int   test_vectors[ACCUM_WINDOW];
+static bool  test_stationary[ACCUM_WINDOW];
+static int   test_corners[ACCUM_WINDOW];
 
-// Sync markers for test viewer
+// Sync markers for test_viewer.py
 static const uint8_t TEST_SYNC[]   = {0xDE, 0xAD, 0xBE, 0xEF};
 static const uint8_t FRAME_SYNC[]  = {0xFF, 0xD8, 0xBE, 0xEF};
 static const uint8_t CORNER_SYNC[] = {0xC0, 0x52, 0x4E, 0x52};
 static const uint8_t FLOW_SYNC[]   = {0xF1, 0x0E, 0xDA, 0x7A};
 
-// ─── Internal ────────────────────────────────────────────────────────────
+// ─── Internal: capture frame ─────────────────────────────────────────────
 static camera_fb_t* capture_frame() {
     camera_fb_t *fb = esp_camera_fb_get();
     if (!fb) ESP_LOGE(TAG, "Capture failed");
     return fb;
 }
 
+// ─── Internal: send frame data for test_viewer.py ────────────────────────
 static void send_frame_data(camera_fb_t *fb,
                             Corner *corners, int n_corners,
                             FlowVector *flow, int n_flow,
                             int frame_num, FlowDecomposition *decomp) {
     vTaskDelay(pdMS_TO_TICKS(30));
 
+    // 1. Test metadata
     Serial.write(TEST_SYNC, 4);
     uint8_t fnum = (uint8_t)frame_num;
     Serial.write(&fnum, 1);
@@ -84,9 +89,11 @@ static void send_frame_data(camera_fb_t *fb,
         Serial.write((uint8_t *)&zero, 4);
     }
 
+    // 2. Frame
     Serial.write(FRAME_SYNC, 4);
     Serial.write(fb->buf, fb->len);
 
+    // 3. Corners
     Serial.write(CORNER_SYNC, 4);
     uint16_t cc = (uint16_t)n_corners;
     Serial.write((uint8_t *)&cc, 2);
@@ -96,6 +103,7 @@ static void send_frame_data(camera_fb_t *fb,
         Serial.write((uint8_t *)&corners[i].score, 2);
     }
 
+    // 4. Flow vectors (valid only)
     Serial.write(FLOW_SYNC, 4);
     uint16_t n_valid = 0;
     for (int i = 0; i < n_flow; i++) {
@@ -117,12 +125,34 @@ static void test_capture_step() {
     camera_fb_t *fb = capture_frame();
     if (!fb) { ESP_LOGE(TAG, "Capture failed!"); return; }
 
+    // FAST corners
     Corner corners[MAX_CORNERS];
     int n_raw = fast9_detect(fb->buf, fb->width, fb->height, FAST_THRESHOLD, corners);
     int n_final = fast_nms(corners, n_raw, NMS_RADIUS);
 
     ESP_LOGI(TAG, "  FAST: %d corners", n_final);
 
+    // Corner gate (Vedant's fix)
+    if (n_final < MIN_CORNERS) {
+        ESP_LOGW(TAG, "  LOW CORNERS (%d < %d) — frame skipped (bad scene/lighting)",
+                 n_final, MIN_CORNERS);
+
+        // Still send frame for visualization so we can see why
+        send_frame_data(fb, corners, n_final, nullptr, 0,
+                        test_frame_num, nullptr);
+
+        // Update prev_frame but mark no corners for next flow
+        memcpy(prev_frame, fb->buf, FRAME_BYTES);
+        prev_n_corners = 0;
+        has_prev_frame = true;
+        esp_camera_fb_return(fb);
+        test_frame_num++;
+
+        ESP_LOGI(TAG, "  >>> Improve lighting or point at textured surface");
+        return;
+    }
+
+    // LK optical flow
     FlowVector flow[MAX_FLOW];
     int n_flow = 0;
     FlowDecomposition decomp = {};
@@ -132,7 +162,7 @@ static void test_capture_step() {
         int n_tracked = lk_optical_flow(prev_frame, fb->buf, FRAME_W, FRAME_H,
                                          prev_corners, prev_n_corners, flow);
         n_flow = prev_n_corners;
-        flow_accum.add_frame(flow, n_flow, &decomp);
+        flow_accum.add_frame(flow, n_flow, &decomp, n_final);
         has_flow = true;
 
         int idx = test_frame_num - 1;
@@ -141,28 +171,37 @@ static void test_capture_step() {
             test_lat_dy[idx] = decomp.lateral_dy;
             test_radial[idx] = decomp.radial_mean;
             test_vectors[idx] = decomp.n_valid;
+            test_stationary[idx] = decomp.is_stationary;
+            test_corners[idx] = n_final;
         }
 
         MotionDirection dir = FlowAccumulator::classify_direction(
             decomp.lateral_dx, decomp.lateral_dy, decomp.radial_mean);
 
-        ESP_LOGI(TAG, "  LK: %d/%d tracked", n_tracked, prev_n_corners);
-        ESP_LOGI(TAG, "  LATERAL: dx=%+.2f dy=%+.2f px",
-                 decomp.lateral_dx, decomp.lateral_dy);
-        ESP_LOGI(TAG, "  RADIAL:  %+.2f", decomp.radial_mean);
-        ESP_LOGI(TAG, "  DIRECTION: %s", FlowAccumulator::direction_name(dir));
+        ESP_LOGI(TAG, "  LK: %d/%d tracked (%d passed filter, %d noise-rejected)",
+                 n_tracked, prev_n_corners, decomp.n_valid, decomp.n_rejected);
+
+        if (decomp.is_stationary) {
+            ESP_LOGI(TAG, "  RESULT: STATIONARY (below dead zone)");
+        } else {
+            ESP_LOGI(TAG, "  LATERAL: dx=%+.2f dy=%+.2f px", decomp.lateral_dx, decomp.lateral_dy);
+            ESP_LOGI(TAG, "  RADIAL:  %+.2f", decomp.radial_mean);
+            ESP_LOGI(TAG, "  DIRECTION: %s", FlowAccumulator::direction_name(dir));
+        }
 
         float tot_dx, tot_dy, tot_rad;
         flow_accum.get_pixel_totals(tot_dx, tot_dy, tot_rad);
         ESP_LOGI(TAG, "  Running total: lat(%+.2f,%+.2f) rad=%+.2f", tot_dx, tot_dy, tot_rad);
     } else {
-        ESP_LOGI(TAG, "  Frame 0 = baseline");
+        ESP_LOGI(TAG, "  Frame 0 = baseline (%d corners)", n_final);
     }
 
+    // Send frame for visualization
     ESP_LOGI(TAG, "  Sending frame %d...", test_frame_num);
     send_frame_data(fb, corners, n_final, flow, n_flow,
                     test_frame_num, has_flow ? &decomp : nullptr);
 
+    // Store previous
     memcpy(prev_frame, fb->buf, FRAME_BYTES);
     memcpy(prev_corners, corners, sizeof(Corner) * n_final);
     prev_n_corners = n_final;
@@ -170,24 +209,43 @@ static void test_capture_step() {
     esp_camera_fb_return(fb);
     test_frame_num++;
 
+    // Window complete?
     if (flow_accum.is_ready()) {
         CameraMeasurement cm = flow_accum.get_measurement(esp_timer_get_time());
 
         ESP_LOGI(TAG, "");
         ESP_LOGI(TAG, "======================================================");
-        ESP_LOGI(TAG, "   TEST COMPLETE — %d FRAMES", ACCUM_WINDOW);
+        ESP_LOGI(TAG, "   TEST COMPLETE — %d FRAMES (%d active, %d stationary)",
+                 ACCUM_WINDOW, cm.n_active_frames,
+                 ACCUM_WINDOW - 1 - cm.n_active_frames);
         ESP_LOGI(TAG, "======================================================");
         for (int i = 0; i < ACCUM_WINDOW - 1; i++) {
-            ESP_LOGI(TAG, "    F%d: lat(%+6.2f,%+6.2f) rad=%+6.2f [%d vec]",
-                     i + 1, test_lat_dx[i], test_lat_dy[i], test_radial[i], test_vectors[i]);
+            if (test_stationary[i]) {
+                ESP_LOGI(TAG, "    F%d: STATIONARY  [%d corners, %d vec]",
+                         i + 1, test_corners[i], test_vectors[i]);
+            } else {
+                MotionDirection fd = FlowAccumulator::classify_direction(
+                    test_lat_dx[i], test_lat_dy[i], test_radial[i]);
+                ESP_LOGI(TAG, "    F%d: lat(%+6.2f,%+6.2f) rad=%+6.2f  %-11s [%d corners, %d vec]",
+                         i + 1, test_lat_dx[i], test_lat_dy[i], test_radial[i],
+                         FlowAccumulator::direction_name(fd),
+                         test_corners[i], test_vectors[i]);
+            }
         }
         ESP_LOGI(TAG, "------------------------------------------------------");
         ESP_LOGI(TAG, "  LATERAL:    dx=%+.2f  dy=%+.2f px", cm.lateral_dx, cm.lateral_dy);
         ESP_LOGI(TAG, "  RADIAL:     %+.2f px", cm.radial_total);
-        ESP_LOGI(TAG, "  DIRECTION:  %s (%.1f deg)",
-                 FlowAccumulator::direction_name(cm.direction), cm.direction_angle);
-        ESP_LOGI(TAG, "  CONFIDENCE: %.2f", cm.confidence);
-        ESP_LOGI(TAG, "  VARIANCE:   lat=%.3f rad=%.3f", cm.variance_lateral, cm.variance_radial);
+        ESP_LOGI(TAG, "  DIRECTION:  %s", FlowAccumulator::direction_name(cm.direction));
+        ESP_LOGI(TAG, "  CONFIDENCE: %.2f (vec=%.0f%% var=%.0f%% corners=%.0f%%)",
+                 cm.confidence,
+                 fminf((float)cm.total_vectors / 50.0f, 1.0f) * 100,
+                 (1.0f / (1.0f + sqrtf(cm.variance_lateral + cm.variance_radial) * 2.0f)) * 100,
+                 fminf((float)cm.total_corners / ((float)cm.n_frames * 20.0f), 1.0f) * 100);
+        ESP_LOGI(TAG, "  VECTORS:    %d total, avg %.1f/frame",
+                 cm.total_vectors,
+                 cm.n_active_frames > 0 ? (float)cm.total_vectors / cm.n_active_frames : 0);
+        ESP_LOGI(TAG, "  CORNERS:    %d total, avg %.1f/frame",
+                 cm.total_corners, (float)cm.total_corners / cm.n_frames);
         ESP_LOGI(TAG, "======================================================");
 
         flow_accum.reset();
@@ -250,8 +308,10 @@ bool cameraInit() {
     }
 
     flow_accum.reset();
-    ESP_LOGI(TAG, "Camera init OK - 320x240 grayscale");
-    ESP_LOGI(TAG, "Output: direction + raw pixels + confidence");
+    ESP_LOGI(TAG, "Camera init OK - 320x240 grayscale (stabilized)");
+    ESP_LOGI(TAG, "Filters: min_flow=%.1fpx dead_zone=%.1fpx stationary=%.1fpx min_corners=%d",
+             MIN_FLOW_MAGNITUDE, FRAME_DEAD_ZONE, STATIONARY_THRESHOLD, MIN_CORNERS);
+    ESP_LOGI(TAG, "Directions: FORWARD, BACKWARD, LEFT, RIGHT, STATIONARY");
     ESP_LOGI(TAG, "Commands: 't'=manual test, 'r'=reset");
     return true;
 }
@@ -262,41 +322,53 @@ bool cameraProcessFrame(float &dx, float &dy, float &confidence) {
     camera_fb_t *fb = capture_frame();
     if (!fb) return false;
 
+    // FAST corners
     Corner corners[MAX_CORNERS];
     int n_raw = fast9_detect(fb->buf, fb->width, fb->height, FAST_THRESHOLD, corners);
     int n_final = fast_nms(corners, n_raw, NMS_RADIUS);
 
+    // Corner gate: not enough features for reliable tracking
+    if (n_final < MIN_CORNERS) {
+        ESP_LOGW(TAG, "Low corners (%d) — skipping frame", n_final);
+        memcpy(prev_frame, fb->buf, FRAME_BYTES);
+        prev_n_corners = 0;
+        has_prev_frame = true;
+        esp_camera_fb_return(fb);
+        return false;
+    }
+
     bool measurement_ready = false;
 
+    // LK optical flow
     if (has_prev_frame && prev_n_corners > 0) {
         FlowVector flow[MAX_FLOW];
         lk_optical_flow(prev_frame, fb->buf, FRAME_W, FRAME_H,
                         prev_corners, prev_n_corners, flow);
 
         FlowDecomposition decomp;
-        flow_accum.add_frame(flow, prev_n_corners, &decomp);
+        flow_accum.add_frame(flow, prev_n_corners, &decomp, n_final);
 
         if (flow_accum.is_ready()) {
             CameraMeasurement cm = flow_accum.get_measurement(esp_timer_get_time());
 
             if (cm.valid) {
-                // Output raw pixel displacement for EKF
-                // dx = lateral pixels, dy = lateral pixels
-                // The EKF uses IMU for scale (meters)
                 dx = cm.lateral_dx;
-                dy = cm.lateral_dy;
+                dy = cm.radial_total;
                 confidence = cm.confidence;
                 measurement_ready = true;
 
-                ESP_LOGI(TAG, ">>> CAM: dir=%s lat(%+.1f,%+.1f) rad=%+.1f conf=%.2f",
+                ESP_LOGI(TAG, ">>> CAM: %s | lat(%+.1f,%+.1f) rad=%+.1f | conf=%.2f | active=%d/%d | corners_avg=%.0f",
                          FlowAccumulator::direction_name(cm.direction),
                          cm.lateral_dx, cm.lateral_dy,
-                         cm.radial_total, cm.confidence);
+                         cm.radial_total, cm.confidence,
+                         cm.n_active_frames, cm.n_frames,
+                         (float)cm.total_corners / cm.n_frames);
             }
             flow_accum.reset();
         }
     }
 
+    // Store previous
     memcpy(prev_frame, fb->buf, FRAME_BYTES);
     memcpy(prev_corners, corners, sizeof(Corner) * n_final);
     prev_n_corners = n_final;
@@ -306,23 +378,11 @@ bool cameraProcessFrame(float &dx, float &dy, float &confidence) {
     return measurement_ready;
 }
 
-int n_final = fast_nms(corners, n_raw, NMS_RADIUS);
-
-// Gate: not enough corners for reliable tracking
-if (n_final < 8) {
-    ESP_LOGW(TAG, "Low corners (%d) — skipping frame", n_final);
-    // Still update prev_frame so we don't stall the pipeline
-    memcpy(prev_frame, fb->buf, FRAME_BYTES);
-    prev_n_corners = 0;  // Force no flow on next frame
-    has_prev_frame = true;
-    esp_camera_fb_return(fb);
-    return false;
-}
-
 void cameraDebugCheck() {
     if (!Serial.available()) return;
     char cmd = Serial.read();
 
+    // In test mode: any key except 't' triggers next capture
     if (test_mode && cmd != 't' && cmd != 'T') {
         ESP_LOGI(TAG, "");
         ESP_LOGI(TAG, "-- Frame %d --", test_frame_num);
@@ -342,14 +402,18 @@ void cameraDebugCheck() {
                 memset(test_lat_dy, 0, sizeof(test_lat_dy));
                 memset(test_radial, 0, sizeof(test_radial));
                 memset(test_vectors, 0, sizeof(test_vectors));
+                memset(test_stationary, 0, sizeof(test_stationary));
+                memset(test_corners, 0, sizeof(test_corners));
 
                 ESP_LOGI(TAG, "");
                 ESP_LOGI(TAG, "======================================================");
-                ESP_LOGI(TAG, "   MANUAL TEST MODE");
+                ESP_LOGI(TAG, "   MANUAL TEST MODE (stabilized)");
                 ESP_LOGI(TAG, "======================================================");
-                ESP_LOGI(TAG, "  Press any key for each frame capture.");
+                ESP_LOGI(TAG, "  Directions: FORWARD, BACKWARD, LEFT, RIGHT");
+                ESP_LOGI(TAG, "  Noise rejection: ON");
+                ESP_LOGI(TAG, "  Corner gate: min %d corners", MIN_CORNERS);
+                ESP_LOGI(TAG, "  Press any key for each frame. 't' to exit.");
                 ESP_LOGI(TAG, "  Use test_viewer.py to save frame images.");
-                ESP_LOGI(TAG, "  Type 't' to exit.");
                 ESP_LOGI(TAG, "======================================================");
                 ESP_LOGI(TAG, ">>> Press any key for baseline...");
             } else {
