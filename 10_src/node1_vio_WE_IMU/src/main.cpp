@@ -81,7 +81,7 @@ void imuTask(void* pvParameters) {
 
         uint32_t now = millis();
         float dt = (now - lastReadMs) / 1000.0f;
-        lastReadMs = now;
+        //lastReadMs = now;
 
         float ax, ay, az, gx, gy, gz;
 
@@ -89,9 +89,16 @@ void imuTask(void* pvParameters) {
         if (imu.read(ax, ay, az, gx, gy, gz)) {
             // CRITICAL: Convert gyroscope Z from degrees/s to radians/s
             //float gz_rad = gz * (PI / 180.0f);
-
+            lastReadMs = now;
             ImuData data = { ax, ay, gz, dt };
-            xQueueSend(imuQueue, &data, 0); // non-blocking: drop if full
+            if (xQueueSend(imuQueue, &data, 0) !=pdTRUE){
+                // Queue is full — drop IMU data to avoid blocking. This is a critical safety measure: if the EKF update step ever blocks on the queue, the IMU task will be unable to run and the state estimate will fail catastrophically.
+                static uint32_t lastDropWarn = 0;
+                if (now - lastDropWarn > 1000) { // Rate-limit warning prints
+                    Serial.println("Warning: imuQueue full, dropping IMU data");
+                    lastDropWarn = millis();
+                }
+            }
         }
     }
 }
@@ -278,13 +285,13 @@ void setup() {
     // TODO (Phillipp): EKF init
 // Initialize Kalman Filter Matrices
     drift::ekfInit();
-    delay(200);
-    drift::ekfGetOrientation(initial_yaw);
-    Serial.println("[NODE 1] EKF Initialized.");
     drift::ekfReset();
+    drift::ekfSetInitialBias(imu.residualGz); // Use the post-calibration residual as the initial bias estimate
+        Serial.printf("Initial gyro bias set to %.4f rad/s (%.2f mdps)\n", imu.residualGz, imu.residualGz * (180.0f / PI) * 1000.0f);
+        Serial.println("EKF initialized and reset.");
 
     // Create the inter-core queue before spawning tasks
-    imuQueue = xQueueCreate(20, sizeof(ImuData));
+    imuQueue = xQueueCreate(30, sizeof(ImuData));
 
     // Spawn tasks — imuTask on Core 0, fusion + telemetry on Core 1
     xTaskCreatePinnedToCore(imuTask,    "imuTask",    4096, nullptr, 5, nullptr, 0);

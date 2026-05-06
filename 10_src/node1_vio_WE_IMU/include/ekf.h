@@ -89,6 +89,13 @@ void ekfZuptVelocity();
 void ekfZupt(float gz);
 
 /**
+ * @brief Sets the initial gyro bias estimate in the state vector.
+ * Call this once at startup after the first few seconds of calibration.
+ * @param bgz_rad_s Initial bias estimate in radians per second.
+ */
+void ekfSetInitialBias(float bgz_rad_s);
+
+/**
  * @brief Zeroes the motion-history cross-covariances between yaw and
  * {vx, vy, bgz} in P. Call exactly once when the robot transitions from
  * motion to rest, just before the first ZUPT fires.

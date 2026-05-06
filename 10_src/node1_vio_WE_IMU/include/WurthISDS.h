@@ -50,15 +50,15 @@ public:
         ISDS_enableBlockDataUpdate(&sensorInterface, ISDS_enable);
         return true;
     }
-
-    void calibrate(int samples = 500) {
+    float residualGz = 0.0f;
+    void calibrate(int samples = 1000) {
         float sumAx = 0, sumAy = 0, sumAz = 0;
         float sumGx = 0, sumGy = 0, sumGz = 0;
         float ax, ay, az, gx, gy, gz;
 
         // Wait for the sensor to thermally stabilize before collecting bias samples
-        delay(1000);
-        for (int i = 0; i < 100; i++) {
+        delay(8000);
+        for (int i = 0; i < 200; i++) {
             readRaw(ax, ay, az, gx, gy, gz);
             delay(5);
         }
@@ -81,6 +81,14 @@ public:
         offsetGx = sumGx / samples;
         offsetGy = sumGy / samples;
         offsetGz = sumGz / samples;
+
+        float rgz_sum = 0.0f;
+        for (int i = 0; i < 200; i++) {
+            readRaw(ax, ay, az, gx, gy, gz);
+            rgz_sum += (gz - offsetGz) / 1000.0f * (PI / 180.0f);
+            delay(5);
+        }
+        residualGz = rgz_sum / 200.0f;
     }
 
     bool read(float &ax, float &ay, float &az, float &gx, float &gy, float &gz) {
@@ -98,13 +106,13 @@ public:
             gy -= offsetGy;
             gz -= offsetGz;
             
-            ax = (ax / 1000.0f) * 9.81f;
-            ay = (ay / 1000.0f) * 9.81f;
-            az = (az / 1000.0f) * 9.81f;
+            ax = _fax.update((ax / 1000.0f) * 9.81f);
+            ay = _fay.update((ay / 1000.0f) * 9.81f);
+            az = _faz.update((az / 1000.0f) * 9.81f);
 
-            gx = (gx / 1000.0f) * (PI / 180.0f);
-            gy = (gy / 1000.0f) * (PI / 180.0f);
-            gz = _fgz.update((gz / 1000.0f) * (PI / 180.0f));
+            gx = _fgx.update((gx / 1000.0f) * (PI / 180.0f));
+            gy = _fgy.update((gy / 1000.0f) * (PI / 180.0f));
+            gz = (gz / 1000.0f) * (PI / 180.0f);
 
             return true;
         }
@@ -112,7 +120,8 @@ public:
     }
 
 private:
-    MovingAvg<5> _fgz;
+    MovingAvg<5> _fax, _fay, _faz;
+    MovingAvg<5> _fgx, _fgy;
 
     void readRaw(float &ax, float &ay, float &az, float &gx, float &gy, float &gz) {
         ISDS_getAccelerations_float(&sensorInterface, &ax, &ay, &az);
