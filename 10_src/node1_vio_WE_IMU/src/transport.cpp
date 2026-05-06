@@ -10,6 +10,7 @@
 #include <ArduinoJson.h>
 #include "transport.h"
 #include "ekf.h"
+#include <Arduino.h>
 
 static const char* WIFI_SSID = "YOUR_WIFI_SSID";
 static const char* WIFI_PASSWORD = "YOUR_WIFI_PASSWORD";
@@ -49,13 +50,14 @@ void drift::sendOdometryPacket(uint32_t timestamp_ms) {
     float px, py, yaw;
     drift::ekfGetPosition(px, py);
     drift::ekfGetOrientation(yaw);
-
+    float temperature_c = temperatureRead();
     JsonDocument packet;
     packet["node"] = NODE_ID;
     packet["ts"] = timestamp_ms;
     packet["px"] = px;
     packet["py"] = py;
     packet["yaw"] = yaw;
+    packet["temperature_c"] = temperatureRead();
 
     char buffer[256];
     size_t len = serializeJson(packet, buffer, sizeof(buffer));

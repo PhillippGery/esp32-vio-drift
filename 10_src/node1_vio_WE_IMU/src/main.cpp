@@ -212,9 +212,11 @@ void fusionTask(void* pvParameters) {
 
             float bgz;
             drift::ekfGetBias(bgz);
+
+            float temp_c = temperatureRead();
             float bgz_mdps = bgz * (180.0f / PI) * 1000.0f;
-            Serial.printf("[EKF] X:%8.3f m  Y:%8.3f m  Yaw:%8.3f deg  bgz:%+.2f mdps  conf:%.2f\n",
-                          px, py, yaw_deg, bgz_mdps, last_cam_confidence);
+            Serial.printf("[EKF] X:%8.3f m  Y:%8.3f m  Yaw:%8.3f deg  bgz:%+.2f mdps  conf:%.2f  temp:%.1f C\n",
+                          px, py, yaw_deg, bgz_mdps, last_cam_confidence, temp_c);
         }
 
     }
