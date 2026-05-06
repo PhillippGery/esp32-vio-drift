@@ -60,6 +60,9 @@ public:
    */
   bool readRaw(float &ax, float &ay, float &az,
                float &gx, float &gy, float &gz);
+  bool readRaw(float &ax, float &ay, float &az,
+               float &gx, float &gy, float &gz,
+               float &temp_c);
 
   /** * @brief Read filtered and offset-compensated data from MPU-6050.
    * * @param[out] ax  Acceleration X in m/s²
@@ -72,6 +75,9 @@ public:
    */
   bool read(float &ax, float &ay, float &az,
             float &gx, float &gy, float &gz);
+  bool read(float &ax, float &ay, float &az,
+            float &gx, float &gy, float &gz,
+            float &temp_c);
 
   /** * @brief Calculate zero-motion offsets for calibration.
    * * @param samples  Number of samples to average (default: 500)

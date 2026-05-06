@@ -8,10 +8,11 @@
 #include <WiFi.h>
 #include <WiFiUdp.h>
 #include <ArduinoJson.h>
+#include <array>
 #include "transport.h"
 
-static const char* WIFI_SSID = "Apt 222";
-static const char* WIFI_PASSWORD = "netpass222";
+static const char* WIFI_SSID = "Jack's Surface";
+static const char* WIFI_PASSWORD = "Hello World!";
 static const char* UDP_TARGET_IP = "255.255.255.255";
 constexpr uint16_t UDP_TARGET_PORT = 4210;
 constexpr uint16_t UDP_LOCAL_PORT = 4212;
@@ -42,8 +43,9 @@ bool drift::transportInit() {
     return true;
 }
 
-void drift::sendImuPacket(uint32_t timestamp_ms, float ax, float ay, float az, float gx, float gy, float gz) {
-    StaticJsonDocument<192> packet;
+
+void drift::sendImuPacket(uint32_t timestamp_ms, float ax, float ay, float az, float gx, float gy, float gz, float temp_c) {
+    StaticJsonDocument<224> packet;
     packet["node"] = NODE_ID;
     packet["ts"] = timestamp_ms;
     packet["ax"] = ax;
@@ -52,6 +54,7 @@ void drift::sendImuPacket(uint32_t timestamp_ms, float ax, float ay, float az, f
     packet["gx"] = gx;
     packet["gy"] = gy;
     packet["gz"] = gz;
+    packet["temp_c"] = temp_c;
 
     char buffer[256];
     size_t len = serializeJson(packet, buffer, sizeof(buffer));

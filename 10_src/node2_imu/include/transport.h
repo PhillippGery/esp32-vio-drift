@@ -26,6 +26,6 @@ bool transportInit();
  * @param gy Gyroscope Y
  * @param gz Gyroscope Z
  */
-void sendImuPacket(uint32_t timestamp_ms, float ax, float ay, float az, float gx, float gy, float gz);
+void sendImuPacket(uint32_t timestamp_ms, float ax, float ay, float az, float gx, float gy, float gz, float temp_c);
 
 } // namespace drift

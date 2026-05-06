@@ -11,6 +11,9 @@ PlatformIO project in VS Code.
 
 ## Flash a specific node
 
+First:
+esptool.py --chip esp32 --port /dev/cu.usbserial-5A6C0403221 erase_flash
+
 ```bash
 # Node 1 (VIO)
 cd node1_vio && pio run --target upload
@@ -25,3 +28,6 @@ cd node3_5_imu && pio run -e node3 --target upload
 ## Potential issues
 
 The issue for me was that PlatformIO's default upload speed (921600 baud) caused a serial handshake failure. Using esptool directly at 460800 baud worked perfectly.
+
+To test:
+python data_pipeline/capture_udp.py --duration 60 --output ../30_data/raw_imu/

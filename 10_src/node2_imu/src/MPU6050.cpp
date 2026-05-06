@@ -55,6 +55,58 @@ bool MPU6050::read(float &ax, float &ay, float &az,
   return true;
 }
 
+bool MPU6050::readRaw(float &ax, float &ay, float &az,
+                      float &gx, float &gy, float &gz,
+                      float &temp_c) {
+  uint8_t buf[14];
+  
+  Wire.beginTransmission(_addr);
+  Wire.write(0x3B);
+  if (Wire.endTransmission(false) != 0) {
+    return false; // I2C communication failed
+  }
+  
+  if (Wire.requestFrom(_addr, (uint8_t)14) != 14) {
+    return false; // Did not receive expected bytes
+  }
+  
+  for (int i = 0; i < 14; i++) {
+    buf[i] = Wire.read();
+  }
+
+  ax = _toInt(buf[0],  buf[1])  / ACCEL_SCALE * 9.81f;
+  ay = _toInt(buf[2],  buf[3])  / ACCEL_SCALE * 9.81f;
+  az = _toInt(buf[4],  buf[5])  / ACCEL_SCALE * 9.81f;
+
+  int16_t rawTemp = _toInt(buf[6], buf[7]);
+  temp_c = rawTemp / 340.0f + 36.53f;
+
+  gx = _toInt(buf[8],  buf[9])  / GYRO_SCALE;
+  gy = _toInt(buf[10], buf[11]) / GYRO_SCALE;
+  gz = _toInt(buf[12], buf[13]) / GYRO_SCALE;
+
+  return true;
+}
+
+bool MPU6050::read(float &ax, float &ay, float &az,
+                   float &gx, float &gy, float &gz,
+                   float &temp_c) {
+  float rax, ray, raz, rgx, rgy, rgz;
+  
+  if (!readRaw(rax, ray, raz, rgx, rgy, rgz, temp_c)) {
+    return false;
+  }
+  
+  ax = _fax.update(rax - offsetAx);
+  ay = _fay.update(ray - offsetAy);
+  az = _faz.update(raz - offsetAz);
+  gx = _fgx.update(rgx - offsetGx);
+  gy = _fgy.update(rgy - offsetGy);
+  gz = _fgz.update(rgz - offsetGz);
+
+  return true;
+}
+
 void MPU6050::calibrate(int samples, int delayMs) {
   double sx = 0, sy = 0, sz = 0, sgx = 0, sgy = 0, sgz = 0;
   float ax, ay, az, gx, gy, gz;

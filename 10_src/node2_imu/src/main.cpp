@@ -41,6 +41,7 @@ static float latestAz = 0.0f;
 static float latestGx = 0.0f;
 static float latestGy = 0.0f;
 static float latestGz = 0.0f;
+static float latestTempC = 0.0f;
 
 void setup() {
     Serial.begin(115200);
@@ -72,7 +73,7 @@ void loop() {
         float dt = dt_ms / 1000.0f; // dt in seconds
 
         float ax, ay, az, gx, gy, gz;
-        if (imu.read(ax, ay, az, gx, gy, gz)) {
+        if (imu.read(ax, ay, az, gx, gy, gz, latestTempC)) {
             latestAx = ax;
             latestAy = ay;
             latestAz = az;
@@ -96,6 +97,6 @@ void loop() {
 
     if (now - lastTxMs >= TX_PERIOD_MS) {
         lastTxMs = now;
-        drift::sendImuPacket(now, latestAx, latestAy, latestAz, latestGx, latestGy, latestGz);
+        drift::sendImuPacket(now, latestAx, latestAy, latestAz, latestGx, latestGy, latestGz, latestTempC);
     }
 }
