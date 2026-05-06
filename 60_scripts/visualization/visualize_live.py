@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
-visualize_live.py – Real-time visualizer with Trial Tracking and Spacebar Exit.
-Press [SPACE] to stop, save, and exit.
+visualize_live.py – Real-time visualizer with Trial Tracking, Spacebar Exit,
+                     White Text Fix, and Automated GIF Recording.
 """
 
 import argparse
@@ -18,6 +18,7 @@ import matplotlib.pyplot as plt
 import matplotlib.gridspec as gridspec
 import numpy as np
 from matplotlib.animation import FuncAnimation
+from PIL import Image
 
 # ---------------------------------------------------------------------------
 # CLI & Constants
@@ -26,8 +27,8 @@ from matplotlib.animation import FuncAnimation
 BG_DARK = "#1E1E1E"
 BG_AXES = "#2B2B2B"
 FG_MAIN = "#00FFCC"
-FG_TEXT = "#E0E0E0"
-FG_TICK = "#B0B0B0"
+FG_TEXT = "#FFFFFF"  # Forced pure white for readability
+FG_TICK = "#FFFFFF"  # Forced pure white for axis labels
 GRID_COL = "#3A3A3A"
 BUF = 150
 
@@ -47,7 +48,7 @@ def _get(pkt, key):
 
 
 # ---------------------------------------------------------------------------
-# UDP Receiver (Handles CSV saving on exit)
+# UDP Receiver
 # ---------------------------------------------------------------------------
 
 class UdpReceiver(threading.Thread):
@@ -111,7 +112,6 @@ class UdpReceiver(threading.Thread):
             except:
                 continue
 
-        # This is where the CSV is finalized
         self.csv_file.flush()
         self.csv_file.close()
         print(f"\n[SAVE] Data saved to {os.path.abspath(self.csv_path)}")
@@ -119,7 +119,7 @@ class UdpReceiver(threading.Thread):
 
 
 # ---------------------------------------------------------------------------
-# Visualizer (Handles Spacebar Logic)
+# Visualizer (Forced White Ticks & GIF Engine)
 # ---------------------------------------------------------------------------
 
 class DRIFTVisualizer:
@@ -130,43 +130,65 @@ class DRIFTVisualizer:
         self.pkt_count = 0
         self.last_node, self.last_src, self.last_temp = "?", "?", None
 
-        plt.rcParams.update({"text.color": FG_TEXT, "axes.facecolor": BG_AXES, "figure.facecolor": BG_DARK})
+        # Buffer to keep track of image frames for the GIF
+        self.frames = []
+
+        # Global Matplotlib styling overrides
+        plt.rcParams.update({
+            "text.color": FG_TEXT,
+            "axes.labelcolor": FG_TEXT,
+            "xtick.color": FG_TICK,
+            "ytick.color": FG_TICK,
+            "axes.facecolor": BG_AXES,
+            "figure.facecolor": BG_DARK,
+            "axes.edgecolor": "#555555"
+        })
         self._build_figure()
 
-        # --- KEYBOARD LISTENER ---
+        # Keyboard Intercept
         self.fig.canvas.mpl_connect('key_press_event', self._on_key)
 
     def _on_key(self, event):
-        """Callback for keyboard events."""
         if event.key == ' ':
-            print("\n[SHUTDOWN] Spacebar pressed. Closing...")
-            plt.close(self.fig)  # This breaks the FuncAnimation and main loop
+            print("\n[SHUTDOWN] Spacebar pressed. Finalizing trial asset creation...")
+            plt.close(self.fig)
 
     def _build_figure(self):
         self.fig = plt.figure(figsize=(14, 8))
         gs = gridspec.GridSpec(3, 4, figure=self.fig, wspace=0.4, hspace=0.4)
 
-        # Plots
+        # Main Trajectory
         self.ax_traj = self.fig.add_subplot(gs[:, 0:2])
-        self.ax_traj.set_title(f"Trial #{self.trial_num} | Press [SPACE] to Exit", color=FG_MAIN)
+        self.ax_traj.set_title(f"Trial #{self.trial_num} | [SPACE] to Save & Exit", color=FG_MAIN)
         self.line_traj, = self.ax_traj.plot([], [], color=FG_MAIN, lw=2)
         self.dot_now, = self.ax_traj.plot([], [], "ro")
         self.ax_traj.grid(True, color=GRID_COL)
 
+        # Subplots
         self.ax_pos = self.fig.add_subplot(gs[0, 2])
+        self.ax_pos.set_title("Position X/Y", loc="left", fontsize=9)
         self.line_px, = self.ax_pos.plot([], [], color="#FF5555", label="px")
         self.line_py, = self.ax_pos.plot([], [], color="#55FF55", label="py")
+        self.ax_pos.legend(fontsize=7, loc="upper left", facecolor=BG_DARK, edgecolor="#555")
 
         self.ax_yaw = self.fig.add_subplot(gs[1, 2])
+        self.ax_yaw.set_title("Yaw (Heading)", loc="left", fontsize=9)
         self.line_yaw, = self.ax_yaw.plot([], [], color="#FFAA00")
 
         self.ax_temp = self.fig.add_subplot(gs[2, 2])
+        self.ax_temp.set_title("Temp (°C)", loc="left", fontsize=9)
         self.line_temp, = self.ax_temp.plot([], [], color="#FF8C00")
 
+        # Metrics Text Panel
         self.ax_metrics = self.fig.add_subplot(gs[:, 3])
         self.ax_metrics.axis("off")
         self.metrics_text = self.ax_metrics.text(0, 0.95, "", transform=self.ax_metrics.transAxes,
                                                  family="monospace", va="top", color=FG_MAIN)
+
+        # Critical fix: Force white colors on all numbers explicitly across subplots
+        for ax in [self.ax_traj, self.ax_pos, self.ax_yaw, self.ax_temp]:
+            ax.tick_params(colors=FG_TICK, which='both')
+            ax.grid(True, color=GRID_COL)
 
     def _rescale(self, ax_obj, data):
         if not data: return
@@ -176,12 +198,16 @@ class DRIFTVisualizer:
         ax_obj.set_xlim(0, len(data))
 
     def update(self, _frame):
+        new_data = False
         while self.queue:
             pkt = self.queue.popleft()
             self.pkt_count += 1
-            self.px_data.append(_get(pkt, "px"));
+            new_data = True
+
+            self.px_data.append(_get(pkt, "px"))
             self.py_data.append(_get(pkt, "py"))
             self.yaw_data.append(_get(pkt, "yaw"))
+
             temp = pkt.get("temperature_c")
             if temp is not None:
                 self.last_temp = float(temp)
@@ -190,6 +216,7 @@ class DRIFTVisualizer:
 
         if not self.px_data: return
 
+        # Render visual updates
         self.line_traj.set_data(self.px_data, self.py_data)
         self.dot_now.set_data([self.px_data[-1]], [self.py_data[-1]])
         self.ax_traj.relim();
@@ -199,6 +226,7 @@ class DRIFTVisualizer:
         self.line_px.set_data(x_axis, self.px_data[-BUF:])
         self.line_py.set_data(x_axis, self.py_data[-BUF:])
         self._rescale(self.ax_pos, self.px_data[-BUF:] + self.py_data[-BUF:])
+
         self.line_yaw.set_data(x_axis, self.yaw_data[-BUF:])
         self._rescale(self.ax_yaw, self.yaw_data[-BUF:])
 
@@ -210,19 +238,42 @@ class DRIFTVisualizer:
             f"TRIAL #{self.trial_num}\n{'=' * 20}\n"
             f"Node:   {self.last_node}\n"
             f"Pkts:   {self.pkt_count}\n\n"
-            f"POS X:  {self.px_data[-1]:.3f}\n"
-            f"POS Y:  {self.py_data[-1]:.3f}\n"
+            f"POS X:  {self.px_data[-1]:.3f} m\n"
+            f"POS Y:  {self.py_data[-1]:.3f} m\n"
             f"TEMP:   {self.last_temp if self.last_temp else 0:.2f} C\n\n"
             f"[SPACE] to end trial"
         )
+
+        # GIF Generation: If new packets arrived, take a snapshot of the frame
+        if new_data:
+            self.fig.canvas.draw()
+            # Capture the canvas buffer dynamically
+            rgba = np.asarray(self.fig.canvas.buffer_rgba())
+            self.frames.append(Image.fromarray(rgba).convert("RGB"))
 
     def run(self):
         self.ani = FuncAnimation(self.fig, self.update, interval=100, cache_frame_data=False)
         plt.show()
 
+        # Compile and generate the GIF once the window drops out of main loop execution
+        if self.frames:
+            os.makedirs("gifs", exist_ok=True)
+            gif_path = os.path.join("gifs", f"trial_{self.trial_num}.gif")
+            print(f"[GIF] Processing {len(self.frames)} frames into animated GIF...")
+
+            # Save using Pillow compression to avoid inflating storage limits
+            self.frames[0].save(
+                gif_path,
+                save_all=True,
+                append_images=self.frames[1:],
+                duration=100,  # 100ms per frame matching frame interval
+                loop=0
+            )
+            print(f"[SAVE] Animation exported to {os.path.abspath(gif_path)}")
+
 
 # ---------------------------------------------------------------------------
-# Main Logic
+# Main Execution Flow
 # ---------------------------------------------------------------------------
 
 def main():
@@ -235,7 +286,6 @@ def main():
         viz = DRIFTVisualizer(q, recv.trial_number)
         viz.run()
     finally:
-        # This code runs whenever the window is closed (manually or via spacebar)
         recv.stop()
         recv.join(timeout=2.0)
 
