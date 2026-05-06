@@ -90,6 +90,12 @@ void ekfPredict(float ax, float ay, float gz, float dt) {
     P = F_mat * P * (~F_mat) + Q;
 }
 
+void ekfSetInitialBias(float bgz_rad_s) {
+    x(5) = bgz_rad_s;
+    P(5, 5) = 1e-6f;  // tell the filter "we're confident in this value"
+}
+
+
 void ekfUpdateCamera(float meas_vx, float meas_vy, float meas_yaw, float confidence) {
     // Define Measurement Vector (z)
     Matrix<3, 1> z = {meas_vx, meas_vy, meas_yaw};

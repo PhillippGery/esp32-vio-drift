@@ -22,7 +22,7 @@ struct EkfConfig {
     float q_vx  = 0.01f;
     float q_vy  = 0.01f;
     float q_yaw = 0.0005f; // lower = trust IMU yaw integration more, less camera pull
-    float q_bgz = 0.0001f;
+    float q_bgz = 0.00001f;
     
     // Measurement Noise (R) - Camera baseline error
     float cam_base_noise = 0.001f;
@@ -88,6 +88,14 @@ void ekfZuptVelocity();
  */
 void ekfZupt(float gz);
 
+
+/**
+ * @brief Sets the initial gyro bias estimate in the state vector and
+ * tells the filter to trust it. Use this at startup if you have a known
+ * residual bias from calibration that you want to seed into the filter.
+ */
+void ekfSetInitialBias(float bgz_rad_s);  // was ekfSEtInitialBias
+
 /**
  * @brief Zeroes the motion-history cross-covariances between yaw and
  * {vx, vy, bgz} in P. Call exactly once when the robot transitions from
@@ -101,3 +109,12 @@ void ekfZupt(float gz);
 void ekfDecoupleOnStop();
 
 } // namespace drift
+
+// changes suggested 
+// In ekf.h:
+//void ekfSetInitialBias(float bgz_rad_s);
+
+// In ekf.cpp:
+//void ekfSetInitialBias(float bgz_rad_s) {
+    //x(5) = bgz_rad_s;
+//}
