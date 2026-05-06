@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
-visualize_live.py – Real-time visualizer for processed DRIFT packets.
-New Packet Format: {"node": 1, "ts": 123, "px": 1.2, "py": 0.5, "yaw": 0.78, "temperature_c": 24.1}
+visualize_live.py – Real-time visualizer with Trial Tracking.
+Saves data to CSV with an incrementing trial_number column.
 """
 
 import argparse
@@ -10,6 +10,7 @@ import json
 import socket
 import threading
 import time
+import os
 from collections import deque
 
 import matplotlib.pyplot as plt
@@ -31,10 +32,11 @@ BUF = 150
 
 
 def parse_args():
-    parser = argparse.ArgumentParser(description="Live DRIFT visualizer.")
+    parser = argparse.ArgumentParser(description="Live DRIFT visualizer with Trial Tracking.")
     parser.add_argument("--port", type=int, default=4210)
     parser.add_argument("--node", type=int, default=None)
-    parser.add_argument("--csv", type=str, default=None)
+    # Defaulting to drift_log.csv so trial tracking has a persistent file to check
+    parser.add_argument("--csv", type=str, default="drift_trials.csv", help="CSV file path")
     parser.add_argument("--buf", type=int, default=500)
     return parser.parse_args()
 
@@ -45,28 +47,53 @@ def _get(pkt, key):
 
 
 # ---------------------------------------------------------------------------
-# UDP Receiver
+# UDP Receiver with Trial Logic
 # ---------------------------------------------------------------------------
 
 class UdpReceiver(threading.Thread):
-    def __init__(self, port, node_filter, packet_queue, csv_path=None):
+    def __init__(self, port, node_filter, packet_queue, csv_path):
         super().__init__(daemon=True)
         self.port = port
         self.node_filter = node_filter
         self.queue = packet_queue
+        self.csv_path = csv_path
+
+        # Trial Management Logic
+        self.trial_number = self._get_next_trial_number()
+        print(f"[DATA] Starting Trial #{self.trial_number}")
+
+        # Initialize CSV (Append mode)
+        file_exists = os.path.isfile(self.csv_path)
+        self.csv_file = open(self.csv_path, "a", newline="", encoding="utf-8")
+        self.csv_writer = csv.writer(self.csv_file)
+
+        # Write header only if the file is new
+        if not file_exists or os.stat(self.csv_path).st_size == 0:
+            self.csv_writer.writerow(["trial_number", "receive_time", "node", "ts", "px", "py", "yaw", "temp"])
+
         self.sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
         self.sock.settimeout(0.5)
         self.sock.bind(("0.0.0.0", self.port))
 
-        self.csv_file = None
-        self.csv_writer = None
-        if csv_path:
-            self.csv_file = open(csv_path, "w", newline="", encoding="utf-8")
-            self.csv_writer = csv.writer(self.csv_file)
-            self.csv_writer.writerow(["time", "node", "ts", "px", "py", "yaw", "temp"])
-
         self.received = 0
         self._stop_event = threading.Event()
+
+    def _get_next_trial_number(self):
+        """Reads the CSV to find the last trial number used."""
+        if not os.path.exists(self.csv_path):
+            return 1
+
+        try:
+            with open(self.csv_path, "r", encoding="utf-8") as f:
+                reader = list(csv.DictReader(f))
+                if not reader:
+                    return 1
+                # Look at the last row's trial_number
+                last_trial = reader[-1].get("trial_number")
+                return int(last_trial) + 1 if last_trial else 1
+        except Exception as e:
+            print(f"[WARN] Could not parse trials from CSV: {e}. Defaulting to 1.")
+            return 1
 
     def stop(self):
         self._stop_event.set()
@@ -87,15 +114,23 @@ class UdpReceiver(threading.Thread):
                 self.queue.append(packet)
                 self.received += 1
 
+                # Log with trial number
                 if self.csv_writer:
                     self.csv_writer.writerow([
-                        time.time(), node, packet.get("ts"),
-                        packet.get("px"), packet.get("py"),
-                        packet.get("yaw"), packet.get("temperature_c")
+                        self.trial_number,
+                        time.time(),
+                        node,
+                        packet.get("ts"),
+                        packet.get("px"),
+                        packet.get("py"),
+                        packet.get("yaw"),
+                        packet.get("temperature_c")
                     ])
             except (socket.timeout, json.JSONDecodeError):
                 continue
-        if self.csv_file: self.csv_file.close()
+
+        self.csv_file.close()
+        print(f"[UDP] Trial #{self.trial_number} logged with {self.received} packets.")
 
 
 # ---------------------------------------------------------------------------
@@ -103,13 +138,13 @@ class UdpReceiver(threading.Thread):
 # ---------------------------------------------------------------------------
 
 class DRIFTVisualizer:
-    def __init__(self, packet_queue):
+    def __init__(self, packet_queue, trial_num):
         self.queue = packet_queue
+        self.trial_num = trial_num
 
         # Buffers
         self.px_data, self.py_data = [], []
-        self.yaw_data = []
-        self.temp_data = []
+        self.yaw_data, self.temp_data = [], []
 
         self.pkt_count = 0
         self.last_node, self.last_src = "?", "?"
@@ -126,31 +161,28 @@ class DRIFTVisualizer:
         self.fig = plt.figure(figsize=(14, 8))
         gs = gridspec.GridSpec(3, 4, figure=self.fig, wspace=0.4, hspace=0.4)
 
-        # 1. Trajectory (Left Side)
+        # Trajectory
         self.ax_traj = self.fig.add_subplot(gs[:, 0:2])
-        self.ax_traj.set_title("Live Trajectory (m)", color=FG_MAIN)
+        self.ax_traj.set_title(f"Trial #{self.trial_num} Trajectory", color=FG_MAIN)
         self.line_traj, = self.ax_traj.plot([], [], color=FG_MAIN, lw=2)
         self.dot_now, = self.ax_traj.plot([], [], "ro")
         self.ax_traj.grid(True, color=GRID_COL)
 
-        # 2. Position vs Time
+        # Plots
         self.ax_pos = self.fig.add_subplot(gs[0, 2])
-        self.ax_pos.set_title("Position X/Y", loc="left", fontsize=9)
         self.line_px, = self.ax_pos.plot([], [], color="#FF5555", label="px")
         self.line_py, = self.ax_pos.plot([], [], color="#55FF55", label="py")
         self.ax_pos.legend(fontsize=7, loc="upper left")
 
-        # 3. Yaw (Heading)
         self.ax_yaw = self.fig.add_subplot(gs[1, 2])
-        self.ax_yaw.set_title("Yaw (Heading)", loc="left", fontsize=9)
         self.line_yaw, = self.ax_yaw.plot([], [], color="#FFAA00")
+        self.ax_yaw.set_title("Yaw", loc="left", fontsize=9)
 
-        # 4. Temperature
         self.ax_temp = self.fig.add_subplot(gs[2, 2])
-        self.ax_temp.set_title("Temperature (°C)", loc="left", fontsize=9)
         self.line_temp, = self.ax_temp.plot([], [], color="#FF8C00")
+        self.ax_temp.set_title("Temp (°C)", loc="left", fontsize=9)
 
-        # 5. Metrics
+        # Metrics
         self.ax_metrics = self.fig.add_subplot(gs[:, 3])
         self.ax_metrics.axis("off")
         self.metrics_text = self.ax_metrics.text(0, 0.95, "", transform=self.ax_metrics.transAxes,
@@ -164,19 +196,15 @@ class DRIFTVisualizer:
         ax_obj.set_xlim(0, len(data))
 
     def update(self, _frame):
-        new_data = False
         while self.queue:
             pkt = self.queue.popleft()
             self.pkt_count += 1
-            new_data = True
 
-            px, py = _get(pkt, "px"), _get(pkt, "py")
-            yaw = _get(pkt, "yaw")
+            self.px_data.append(_get(pkt, "px"))
+            self.py_data.append(_get(pkt, "py"))
+            self.yaw_data.append(_get(pkt, "yaw"))
+
             temp = pkt.get("temperature_c")
-
-            self.px_data.append(px)
-            self.py_data.append(py)
-            self.yaw_data.append(yaw)
             if temp is not None:
                 self.last_temp = float(temp)
                 self.temp_data.append(self.last_temp)
@@ -186,13 +214,12 @@ class DRIFTVisualizer:
 
         if not self.px_data: return
 
-        # Update Trajectory
+        # Drawing logic
         self.line_traj.set_data(self.px_data, self.py_data)
         self.dot_now.set_data([self.px_data[-1]], [self.py_data[-1]])
         self.ax_traj.relim();
         self.ax_traj.autoscale_view()
 
-        # Update Rolling Plots
         x_axis = np.arange(len(self.px_data[-BUF:]))
         self.line_px.set_data(x_axis, self.px_data[-BUF:])
         self.line_py.set_data(x_axis, self.py_data[-BUF:])
@@ -202,22 +229,16 @@ class DRIFTVisualizer:
         self._rescale(self.ax_yaw, self.yaw_data[-BUF:])
 
         if self.temp_data:
-            t_tail = self.temp_data[-BUF:]
-            self.line_temp.set_data(np.arange(len(t_tail)), t_tail)
-            self._rescale(self.ax_temp, t_tail)
+            self.line_temp.set_data(np.arange(len(self.temp_data[-BUF:])), self.temp_data[-BUF:])
+            self._rescale(self.ax_temp, self.temp_data[-BUF:])
 
-        # Update Text
-        temp_str = f"{self.last_temp:.2f} °C" if self.last_temp else "N/A"
         self.metrics_text.set_text(
-            f"DRIFT TELEMETRY\n{'=' * 20}\n"
-            f"Node:   {self.last_node}\nIP:     {self.last_src}\n"
-            f"Packets:{self.pkt_count}\n\n"
-            f"POSITION\n{'=' * 20}\n"
-            f"X: {self.px_data[-1]:.3f} m\nY: {self.py_data[-1]:.3f} m\n\n"
-            f"HEADING\n{'=' * 20}\n"
-            f"Yaw: {self.yaw_data[-1]:.3f}\n\n"
-            f"ENVIRONMENT\n{'=' * 20}\n"
-            f"Temp: {temp_str}"
+            f"TRIAL #{self.trial_num}\n{'=' * 20}\n"
+            f"Node:   {self.last_node}\n"
+            f"Pkts:   {self.pkt_count}\n\n"
+            f"POS X:  {self.px_data[-1]:.3f}\n"
+            f"POS Y:  {self.py_data[-1]:.3f}\n"
+            f"TEMP:   {self.last_temp if self.last_temp else 0:.2f} C"
         )
 
     def run(self):
@@ -225,13 +246,20 @@ class DRIFTVisualizer:
         plt.show()
 
 
+# ---------------------------------------------------------------------------
+# Main
+# ---------------------------------------------------------------------------
+
 def main():
     args = parse_args()
     q = deque(maxlen=args.buf)
+
     recv = UdpReceiver(args.port, args.node, q, args.csv)
     recv.start()
+
     try:
-        DRIFTVisualizer(q).run()
+        viz = DRIFTVisualizer(q, recv.trial_number)
+        viz.run()
     finally:
         recv.stop()
 
