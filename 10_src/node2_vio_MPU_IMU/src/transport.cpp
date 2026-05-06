@@ -11,8 +11,8 @@
 #include "transport.h"
 #include "ekf.h"
 
-static const char* WIFI_SSID = "YOUR_WIFI_SSID";
-static const char* WIFI_PASSWORD = "YOUR_WIFI_PASSWORD";
+static const char* WIFI_SSID = "esp32";
+static const char* WIFI_PASSWORD = "esp32s3seed";
 static const char* UDP_TARGET_IP = "255.255.255.255";
 constexpr uint16_t UDP_TARGET_PORT = 4210;
 constexpr uint16_t UDP_LOCAL_PORT = 4211;

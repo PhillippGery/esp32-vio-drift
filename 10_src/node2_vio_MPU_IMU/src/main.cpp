@@ -44,7 +44,7 @@ constexpr uint32_t TX_PERIOD_MS    = 20;  // 50 Hz
 constexpr uint32_t CAM_PERIOD_MS   = 50; // 20 Hz (placeholder)
 constexpr uint32_t PRINT_PERIOD_MS = 300; // 5 Hz telemetry print
 constexpr bool VISION_ENABLED = true;  // Set to false to disable camera and run IMU-only EKF
-constexpr bool WIFI_ENABLED   = false;  // Set to false to disable WiFi/UDP transport
+constexpr bool WIFI_ENABLED   = true;  // Set to false to disable WiFi/UDP transport
 constexpr bool DEBUG_PRINT    = true;  // Set to false to suppress EKF position serial output
 
 // ── ImuData: passed between cores via imuQueue ────────────────────────────

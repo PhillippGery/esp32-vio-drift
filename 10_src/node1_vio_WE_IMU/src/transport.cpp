@@ -12,8 +12,8 @@
 #include "ekf.h"
 #include <Arduino.h>
 
-static const char* WIFI_SSID = "YOUR_WIFI_SSID";
-static const char* WIFI_PASSWORD = "YOUR_WIFI_PASSWORD";
+static const char* WIFI_SSID = "esp32";
+static const char* WIFI_PASSWORD = "esp32s3seed";
 static const char* UDP_TARGET_IP = "255.255.255.255";
 constexpr uint16_t UDP_TARGET_PORT = 4210;
 constexpr uint16_t UDP_LOCAL_PORT = 4211;
@@ -24,6 +24,7 @@ bool drift::transportInit() {
     Serial.printf("[NODE %d] Connecting to WiFi SSID='%s'...\n", NODE_ID, WIFI_SSID);
     WiFi.mode(WIFI_STA);
     WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
+    WiFi.setTxPower(WIFI_POWER_8_5dBm);
 
     const uint32_t timeout_ms = 15000;
     uint32_t start_ms = millis();

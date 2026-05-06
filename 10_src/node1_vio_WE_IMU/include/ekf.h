@@ -17,29 +17,29 @@ struct EkfConfig {
     float p_init = 1.0f;
     
     // Process Noise (Q) - How much drift we expect per step
-    float q_px  = 0.001f;
-    float q_py  = 0.001f;
+    float q_px  = 0.101f;
+    float q_py  = 0.101f;
     float q_vx  = 0.01f;
     float q_vy  = 0.01f;
-    float q_yaw = 0.0005f; // lower = trust IMU yaw integration more, less camera pull
-    float q_bgz = 0.00001f;
+    float q_yaw = 0.005f; // lower = trust IMU yaw integration more, less camera pull
+    float q_bgz = 0.0001f;
     
     // Measurement Noise (R) - Camera baseline error
     float cam_base_noise = 0.001f;
 
     // ZUPT Measurement Noise (R) - stationary update
-    float zupt_r_vel  = 0.01f;   // velocity channels (vx, vy) when stationary
-    float zupt_r_bgz  = 0.01f;   // gyro bias channel — wider = smoother convergence
+    float zupt_r_vel  = 0.1f;   // velocity channels (vx, vy) when stationary
+    float zupt_r_bgz  = 0.1f;   // gyro bias channel — wider = smoother convergence
 };
 
 
-/**
- * @brief Predict step: Drives the physics engine forward using IMU data.
- * @param ax Linear acceleration in X (m/s^2) - MUST be static-bias corrected!
- * @param ay Linear acceleration in Y (m/s^2) - MUST be static-bias corrected!
- * @param gz Angular velocity around Z (rad/s) - MUST be in radians!
- * @param dt Time delta since last reading (seconds)
- */
+//**
+// * @brief Predict step: Drives the physics engine forward using IMU data.
+// * @param ax Linear acceleration in X (m/s^2) - MUST be static-bias corrected!
+// * @param ay Linear acceleration in Y (m/s^2) - MUST be static-bias corrected!
+// * @param gz Angular velocity around Z (rad/s) - MUST be in radians!
+ //* @param dt Time delta since last reading (seconds)
+ //
 void ekfPredict(float ax, float ay, float gz, float dt);
 
 /**
