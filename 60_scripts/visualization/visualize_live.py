@@ -5,7 +5,8 @@ from ESP32 IMU nodes (replaces synthetic get_telemetry()).
 
 Packet format expected (JSON over UDP):
   {"node": 1, "ts": 123456, "ax": 0.1, "ay": -0.2, "az": 9.8,
-                             "gx": 0.01, "gy": -0.01, "gz": 0.002}
+                             "gx": 0.01, "gy": -0.01, "gz": 0.002,
+                             "temp": 23.5}
 
 Usage:
   python visualize_live.py [--port 4210] [--node 1] [--csv out.csv]
@@ -72,7 +73,7 @@ class UdpReceiver(threading.Thread):
             self._csv_writer = csv.writer(self._csv_file)
             self._csv_writer.writerow([
                 "receive_time", "source_ip", "source_port",
-                "node", "ts", "ax", "ay", "az", "gx", "gy", "gz", "raw_json",
+                "node", "ts", "ax", "ay", "az", "gx", "gy", "gz", "temp", "raw_json",
             ])
 
         self.received = 0
@@ -117,6 +118,7 @@ class UdpReceiver(threading.Thread):
                     node, packet.get("ts"),
                     packet.get("ax"), packet.get("ay"), packet.get("az"),
                     packet.get("gx"), packet.get("gy"), packet.get("gz"),
+                    packet.get("temp"),
                     text,
                 ])
 
@@ -216,10 +218,11 @@ class DRIFTVisualizer:
         self.g_buf   = np.zeros((self.buf_len, 3))   # gyroscope
         self.v_buf   = np.zeros((self.buf_len, 3))   # integrated velocity
 
-        # ── Counters ─────────────────────────────────────────────────────
+        # ── Counters / last-known values ─────────────────────────────────
         self.total_dist  = 0.0
         self.pkt_count   = 0
         self.last_packet: dict = {}
+        self.last_temp: float | None = None   # most-recent temperature reading (°C)
 
         # ── Status line in window title ──────────────────────────────────
         self.fig.canvas.manager.set_window_title("DRIFT – Waiting for packets…")
@@ -244,6 +247,11 @@ class DRIFTVisualizer:
             gz = float(pkt.get("gz") or 0)
             ts = float(pkt.get("ts") or 0)
 
+            # Temperature is optional; keep the last known value if absent
+            raw_temp = pkt.get("temp")
+            if raw_temp is not None:
+                self.last_temp = float(raw_temp)
+
             pos, vel = self.integrator.update(ax, ay, az, ts)
 
             # Accumulate distance
@@ -264,6 +272,7 @@ class DRIFTVisualizer:
 
             latest = dict(pos=pos, vel=vel,
                           accel=[ax, ay, az], gyro=[gx, gy, gz],
+                          temp=self.last_temp,
                           node=pkt.get("node"), ts=ts,
                           source=pkt.get("_source_ip", "?"))
         return latest
@@ -283,6 +292,7 @@ class DRIFTVisualizer:
         vel   = state["vel"]
         accel = state["accel"]
         gyro  = state["gyro"]
+        temp  = state["temp"]
         node  = state["node"]
         src   = state["source"]
 
@@ -328,8 +338,12 @@ class DRIFTVisualizer:
                       fontsize=7, loc="upper left")
             ax.grid(True, color="#333333", alpha=0.5)
 
+        # self.ax_traj.set_aspect('equal', 'box')
+
         # ── Metrics panel ─────────────────────────────────────────────────
         speed = np.linalg.norm(vel)
+        temp_str = f"{temp:.2f} °C" if temp is not None else "N/A"
+
         self.ax_metrics.cla()
         self.ax_metrics.axis("off")
         self.ax_metrics.text(
@@ -361,7 +375,10 @@ class DRIFTVisualizer:
                 f"{'='*25}\n"
                 f"gx: {gyro[0]:>8.4f}\n"
                 f"gy: {gyro[1]:>8.4f}\n"
-                f"gz: {gyro[2]:>8.4f}"
+                f"gz: {gyro[2]:>8.4f}\n\n"
+                f"TEMPERATURE\n"
+                f"{'='*25}\n"
+                f"temp: {temp_str}"
             ),
             transform=self.ax_metrics.transAxes,
             va="top", fontsize=10, color="#00FFCC",
