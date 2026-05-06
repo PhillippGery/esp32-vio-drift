@@ -1,24 +1,47 @@
 #pragma once
+#include "flow_accumulator.h"
 
 namespace drift {
 
 /**
- * @brief Initializes the camera peripheral and allocates PSRAM buffers.
+ * @brief Initializes the OV3660 camera and allocates PSRAM buffers.
  * @return true on success, false on failure.
  */
 bool cameraInit();
 
 /**
- * @brief Captures a frame, runs FAST+LK, and accumulates flow.
- * @param[out] dx         Accumulated X displacement in meters
- * @param[out] dy         Accumulated Y displacement in meters
- * @param[out] confidence How reliable the measurement is
- * @return true ONLY if a full window of flow has accumulated and VIO data is ready.
+ * @brief Captures a frame, runs FAST+LK, accumulates flow.
+ * 
+ * Backward-compatible interface for main.cpp.
+ * Outputs are RAW PIXEL displacements, NOT meters.
+ *
+ * @param[out] dx         Lateral X displacement in pixels (+ = right)
+ * @param[out] dy         Lateral Y displacement in pixels (+ = down)  
+ * @param[out] confidence 0.0 - 1.0, how reliable this measurement is
+ * @return true ONLY when a full 5-frame window has accumulated.
+ *
+ * Direction + radial data logged to serial and available via
+ * cameraGetLastMeasurement().
  */
 bool cameraProcessFrame(float &dx, float &dy, float &confidence);
 
 /**
- * @brief Checks Serial for the 'c' command to trigger a debug capture.
+ * @brief Full measurement interface — returns CameraMeasurement struct.
+ *
+ * Contains: lateral_dx/dy, radial_total, direction, confidence, variance.
+ * Use this when the EKF needs direction or radial data.
+ */
+bool cameraProcessFrame(CameraMeasurement &cam);
+
+/**
+ * @brief Get the last CameraMeasurement (after cameraProcessFrame returned true).
+ */
+const CameraMeasurement& cameraGetLastMeasurement();
+
+/**
+ * @brief Checks Serial for debug commands:
+ *   't' = toggle manual test mode (step-by-step with frame saving)
+ *   'r' = reset accumulator
  */
 void cameraDebugCheck();
 

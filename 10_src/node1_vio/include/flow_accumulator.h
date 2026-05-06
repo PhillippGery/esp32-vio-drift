@@ -15,9 +15,8 @@
 //   - Per-vector: ignore vectors < 0.5px (sensor jitter)
 //   - Per-frame:  clamp to zero if mean < 0.3px (dead zone)
 //   - Final:      STATIONARY if total < 2.0px
-//   - Corner gate: skip frame entirely if < 8 corners (Vedant's fix)
-//
-// No meter conversion — camera provides direction, IMU provides scale.
+//   - Corner gate: skip frame entirely if < 8 corners
+//   - Corner count in confidence: low corners = low confidence
 // ============================================================
 
 static constexpr int ACCUM_WINDOW = 5;
@@ -26,12 +25,11 @@ static constexpr float IMG_CX = 160.0f;
 static constexpr float IMG_CY = 120.0f;
 
 // Noise rejection thresholds
-static constexpr float MIN_FLOW_MAGNITUDE  = 0.5f;   // Per-vector noise floor
-static constexpr float FRAME_DEAD_ZONE     = 0.3f;   // Per-frame dead zone
-static constexpr float STATIONARY_THRESHOLD = 2.0f;   // Final stationary gate
-static constexpr int   MIN_CORNERS         = 8;       // Minimum corners for reliable tracking
+static constexpr float MIN_FLOW_MAGNITUDE   = 0.5f;
+static constexpr float FRAME_DEAD_ZONE      = 0.3f;
+static constexpr float STATIONARY_THRESHOLD  = 2.0f;
+static constexpr int   MIN_CORNERS          = 8;
 
-// 4 directions + stationary
 enum MotionDirection {
     DIR_STATIONARY = 0,
     DIR_FORWARD    = 1,
@@ -50,9 +48,9 @@ struct FlowDecomposition {
 };
 
 struct CameraMeasurement {
-    float lateral_dx;
-    float lateral_dy;
-    float radial_total;
+    float lateral_dx;       // Total lateral x pixels (+ = right)
+    float lateral_dy;       // Total lateral y pixels (+ = down)
+    float radial_total;     // Total radial pixels (+ = forward, - = backward)
 
     MotionDirection direction;
     float direction_angle;
@@ -64,7 +62,7 @@ struct CameraMeasurement {
     int   n_frames;
     int   n_active_frames;
     int   total_vectors;
-    int   total_corners;      // For confidence scaling
+    int   total_corners;
     int64_t timestamp;
     bool valid;
 };
@@ -175,14 +173,15 @@ public:
         dx = m_sum_dx; dy = m_sum_dy; radial = m_sum_radial;
     }
 
+    // FIXED: uses full lateral magnitude sqrt(dx^2 + dy^2), not just fabsf(dx)
     static MotionDirection classify_direction(float lat_dx, float lat_dy, float radial) {
-        float lat_horiz = fabsf(lat_dx);
+        float lat_mag = sqrtf(lat_dx * lat_dx + lat_dy * lat_dy);
         float rad_mag = fabsf(radial);
-        float total = sqrtf(lat_dx * lat_dx + lat_dy * lat_dy + radial * radial);
+        float total = sqrtf(lat_mag * lat_mag + rad_mag * rad_mag);
 
         if (total < STATIONARY_THRESHOLD) return DIR_STATIONARY;
 
-        if (rad_mag > lat_horiz) {
+        if (rad_mag > lat_mag) {
             return radial > 0 ? DIR_FORWARD : DIR_BACKWARD;
         } else {
             return lat_dx > 0 ? DIR_RIGHT : DIR_LEFT;
@@ -220,7 +219,6 @@ public:
         m.direction = classify_direction(m_sum_dx, m_sum_dy, m_sum_radial);
         m.direction_angle = atan2f(m_sum_dy, m_sum_dx) * 180.0f / 3.14159f;
 
-        // Variance from active frames only
         if (m_active_frames > 0) {
             float n = (float)m_active_frames;
             float mdx = m_sum_dx / n, mdy = m_sum_dy / n, mrad = m_sum_radial / n;
@@ -231,12 +229,9 @@ public:
             if (m.variance_radial < 0) m.variance_radial = 0;
         }
 
-        // Confidence = vector_score * consistency_score * corner_score
         float vec_score = fminf((float)m_total_vectors / 50.0f, 1.0f);
         float var_total = sqrtf(m.variance_lateral + m.variance_radial);
         float var_score = 1.0f / (1.0f + var_total * 2.0f);
-
-        // Corner score: penalize low-corner situations (Vedant's dark room fix)
         float avg_corners = (m_frame_count > 0) ? (float)m_total_corners / (float)m_frame_count : 0;
         float corner_score = fminf(avg_corners / 20.0f, 1.0f);
 
