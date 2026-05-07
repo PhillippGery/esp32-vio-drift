@@ -1,6 +1,6 @@
 /**
  * @file    transport.cpp
- * @brief   WiFi UDP transport implementation for Node 1
+ * @brief   WiFi UDP transport implementation for Node 2
  *
  * @author  Sam (Firmware)
  */
@@ -9,14 +9,12 @@
 #include <WiFiUdp.h>
 #include <ArduinoJson.h>
 #include "transport.h"
-#include "ekf.h"
-#include <Arduino.h>
 
 static const char* WIFI_SSID = "esp32";
 static const char* WIFI_PASSWORD = "esp32s3seed";
 static const char* UDP_TARGET_IP = "255.255.255.255";
 constexpr uint16_t UDP_TARGET_PORT = 4210;
-constexpr uint16_t UDP_LOCAL_PORT = 4211;
+constexpr uint16_t UDP_LOCAL_PORT = 4212;
 
 static WiFiUDP udp;
 
@@ -24,7 +22,6 @@ bool drift::transportInit() {
     Serial.printf("[NODE %d] Connecting to WiFi SSID='%s'...\n", NODE_ID, WIFI_SSID);
     WiFi.mode(WIFI_STA);
     WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
-    WiFi.setTxPower(WIFI_POWER_8_5dBm);
 
     const uint32_t timeout_ms = 15000;
     uint32_t start_ms = millis();
@@ -35,7 +32,7 @@ bool drift::transportInit() {
     Serial.println();
 
     if (WiFi.status() != WL_CONNECTED) {
-        Serial.println("[NODE 1] WiFi connect failed.");
+        Serial.println("[NODE 2] WiFi connect failed.");
         return false;
     }
 
@@ -45,20 +42,16 @@ bool drift::transportInit() {
     return true;
 }
 
-void drift::sendOdometryPacket(uint32_t timestamp_ms) {
-    if (WiFi.status() != WL_CONNECTED) return;
-
-    float px, py, yaw;
-    drift::ekfGetPosition(px, py);
-    drift::ekfGetOrientation(yaw);
-    float temperature_c = temperatureRead();
-    JsonDocument packet;
+void drift::sendImuPacket(uint32_t timestamp_ms, float ax, float ay, float az, float gx, float gy, float gz) {
+    StaticJsonDocument<192> packet;
     packet["node"] = NODE_ID;
     packet["ts"] = timestamp_ms;
-    packet["px"] = px;
-    packet["py"] = py;
-    packet["yaw"] = yaw;
-    packet["temperature_c"] = temperatureRead();
+    packet["ax"] = ax;
+    packet["ay"] = ay;
+    packet["az"] = az;
+    packet["gx"] = gx;
+    packet["gy"] = gy;
+    packet["gz"] = gz;
 
     char buffer[256];
     size_t len = serializeJson(packet, buffer, sizeof(buffer));

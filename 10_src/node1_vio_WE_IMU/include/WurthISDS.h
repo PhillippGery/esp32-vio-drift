@@ -112,7 +112,7 @@ public:
 
             gx = _fgx.update((gx / 1000.0f) * (PI / 180.0f));
             gy = _fgy.update((gy / 1000.0f) * (PI / 180.0f));
-            gz = (gz / 1000.0f) * (PI / 180.0f);
+            gz = _fgz.update((gz / 1000.0f) * (PI / 180.0f));
 
             return true;
         }
@@ -121,7 +121,7 @@ public:
 
 private:
     MovingAvg<5> _fax, _fay, _faz;
-    MovingAvg<5> _fgx, _fgy;
+    MovingAvg<5> _fgx, _fgy, _fgz;
 
     void readRaw(float &ax, float &ay, float &az, float &gx, float &gy, float &gz) {
         ISDS_getAccelerations_float(&sensorInterface, &ax, &ay, &az);

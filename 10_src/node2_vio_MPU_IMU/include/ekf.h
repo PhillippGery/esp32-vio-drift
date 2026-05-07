@@ -19,13 +19,13 @@ struct EkfConfig {
     // Process Noise (Q) - How much drift we expect per step
     float q_px  = 0.001f;
     float q_py  = 0.001f;
-    float q_vx  = 0.01f;
-    float q_vy  = 0.01f;
-    float q_yaw = 0.005f;
-    float q_bgz = 0.0001f;
+    float q_vx  = 0.001f;
+    float q_vy  = 0.001f; // Originally 0.01f, reduced to allow for more trust in the IMU's velocity integration
+    float q_yaw = 0.002f; // originally 0.005
+    float q_bgz = 0.00001f; // originally 0.00001f, increased to allow for some gyro bias drift over time
     
     // Measurement Noise (R) - Camera baseline error
-    float cam_base_noise = 0.001f;
+    float cam_base_noise = 0.08f; //originally 0.01f
 };
 
 
@@ -57,7 +57,7 @@ void ekfGetPosition(float &px, float &py);
  */
 void ekfGetOrientation(float &yaw);
 
-
+void ekfZuptVelocity(); // Zero-Velocity Update (ZUPT) to reduce drift when stationary
 /**
  * @brief Forces the state vector back to absolute zero and resets uncertainty.
  * Use this after hardware initialization or when recovering from a crash.

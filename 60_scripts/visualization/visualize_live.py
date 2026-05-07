@@ -190,10 +190,10 @@ class DRIFTVisualizer:
             ax.tick_params(colors=FG_TICK, which='both')
             ax.grid(True, color=GRID_COL)
 
-    def _rescale(self, ax_obj, data):
+    def _rescale(self, ax_obj, data, min_pad):
         if not data: return
         mn, mx = min(data), max(data)
-        pad = max(abs(mx - mn) * 0.1, 0.01)
+        pad = max(abs(mx - mn) * 0.1, min_pad)
         ax_obj.set_ylim(mn - pad, mx + pad)
         ax_obj.set_xlim(0, len(data))
 
@@ -222,17 +222,27 @@ class DRIFTVisualizer:
         self.ax_traj.relim();
         self.ax_traj.autoscale_view()
 
+        xlim = self.ax_traj.get_xlim()
+        ylim = self.ax_traj.get_ylim()
+        if abs(xlim[1] - xlim[0]) < 0.1:
+            mid_x = (xlim[1] + xlim[0]) / 2.0
+            self.ax_traj.set_xlim,(mid_x - 0.05, mid_x + 0.05)
+        if abs(ylim[1] - ylim[0]) < 0.1:
+            mid_y = (ylim[1] + ylim[0]) / 2.0
+            self.ax_traj.set_ylim(mid_y - 0.05, mid_y + 0.05)
+
         x_axis = np.arange(len(self.px_data[-BUF:]))
         self.line_px.set_data(x_axis, self.px_data[-BUF:])
         self.line_py.set_data(x_axis, self.py_data[-BUF:])
-        self._rescale(self.ax_pos, self.px_data[-BUF:] + self.py_data[-BUF:])
+        self._rescale(self.ax_pos, self.px_data[-BUF:] + self.py_data[-BUF:], min_pad = 0.05)
+        
 
         self.line_yaw.set_data(x_axis, self.yaw_data[-BUF:])
-        self._rescale(self.ax_yaw, self.yaw_data[-BUF:])
+        self._rescale(self.ax_yaw, self.yaw_data[-BUF:], min_pad = 0.5)
 
         if self.temp_data:
             self.line_temp.set_data(np.arange(len(self.temp_data[-BUF:])), self.temp_data[-BUF:])
-            self._rescale(self.ax_temp, self.temp_data[-BUF:])
+            self._rescale(self.ax_temp, self.temp_data[-BUF:], min_pad = 0.5)
 
         self.metrics_text.set_text(
             f"TRIAL #{self.trial_num}\n{'=' * 20}\n"

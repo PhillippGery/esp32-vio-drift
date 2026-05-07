@@ -267,6 +267,15 @@ bool cameraProcessFrame(float &vx, float &vy, float &confidence, float dt, float
     int n_raw = fast9_detect(fb->buf, fb->width, fb->height, FAST_THRESHOLD, corners);
     int n_final = fast_nms(corners, n_raw, NMS_RADIUS);
 
+    if (n_final <8) {
+        memcpy(prev_frame, fb->buf, FRAME_BYTES);
+        memcpy(prev_corners, corners, sizeof(Corner) * n_final);
+        prev_n_corners = n_final;
+        has_prev_frame = true;
+        esp_camera_fb_return(fb);
+        return false;
+    }
+
     bool measurement_ready = false;
 
     if (has_prev_frame && prev_n_corners > 0) {

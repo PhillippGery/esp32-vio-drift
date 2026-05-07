@@ -41,7 +41,7 @@
 
 // ── Task periods (ms) ─────────────────────────────────────────────────────
 constexpr uint32_t IMU_PERIOD_MS   = 5;   // 200 Hz
-constexpr uint32_t TX_PERIOD_MS    = 50;  // 50 Hz
+constexpr uint32_t TX_PERIOD_MS    = 100;  // 50 Hz
 constexpr uint32_t CAM_PERIOD_MS   = 50; // 20 Hz (placeholder)
 constexpr uint32_t PRINT_PERIOD_MS = 300; // 5 Hz telemetry print
 constexpr bool VISION_ENABLED = true;  // Set to false to disable camera and run IMU-only EKF

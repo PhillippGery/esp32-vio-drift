@@ -163,5 +163,45 @@ void ekfReset() {
         P(i, i) = active_config.p_init; 
     }
 }
+void ekfZuptVelocity() {
+    // 1. We "measure" that vx and vy are exactly 0.0
+    Matrix<2, 1> z = {0.0f, 0.0f};
 
+    // 2. Observation Matrix (H) - We only extract vx (index 2) and vy (index 3)
+    Matrix<2, STATE_DIM> H = {
+        0.0f, 0.0f, 1.0f, 0.0f, 0.0f, 0.0f,
+        0.0f, 0.0f, 0.0f, 1.0f, 0.0f, 0.0f
+    };
+
+    // 3. Measurement Noise (R) - Tiny noise because we are 100% sure we are stopped
+    Matrix<2, 2> R = {
+        1e-5f, 0.0f,
+        0.0f, 1e-5f
+    };
+
+    // 4. Calculate Innovation (y = z - Hx)
+    Matrix<2, 1> y = z - H * x;
+
+    // 5. Calculate Innovation Covariance (S)
+    Matrix<2, 2> S = H * P * (~H) + R;
+
+    // 6. Calculate Kalman Gain (K)
+    Matrix<2, 2> S_inv;
+    bool is_nonsingular = Invert(S, S_inv);
+    if (!is_nonsingular) return; // Prevent divide-by-zero crashes
+
+    Matrix<STATE_DIM, 2> K = P * (~H) * S_inv;
+
+    // 7. Apply the Correction to State
+    x += K * y;
+
+    // 8. Reduce Uncertainty in Covariance Matrix
+    Matrix<STATE_DIM, STATE_DIM> I;
+    I.Fill(0.0f);
+    for(int i = 0; i < STATE_DIM; i++) {
+        I(i, i) = 1.0f;
+    }
+    
+    P = (I - K * H) * P;
+}
 } // namespace drift

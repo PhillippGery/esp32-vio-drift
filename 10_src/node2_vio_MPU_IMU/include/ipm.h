@@ -7,18 +7,18 @@ namespace drift {
 // ─── CAMERA HARDWARE CONSTANTS ──────────────────────────────────────────
 
 // Height of the camera lens center from the floor (in meters)
-constexpr float CAMERA_HEIGHT_M = 0.15f; 
+constexpr float CAMERA_HEIGHT_M = 0.07f; 
 
 // Downward tilt angle of the camera (in degrees). 
 // 0 = looking straight at the horizon. 90 = looking straight down at the floor.
-constexpr float CAMERA_PITCH_DEG = 30.0f; 
+constexpr float CAMERA_PITCH_DEG = 2.0f; 
 
 // OV3660 Camera FOV estimation (Tune these based on your specific resolution)
 // If running at 640x480, focal length is roughly equivalent to these:
-constexpr float FOCAL_LENGTH_X = 500.0f; 
-constexpr float FOCAL_LENGTH_Y = 500.0f;
-constexpr float IMAGE_CENTER_X = 320.0f; // width / 2
-constexpr float IMAGE_CENTER_Y = 240.0f; // height / 2
+constexpr float FOCAL_LENGTH_X = 250.0f; 
+constexpr float FOCAL_LENGTH_Y = 250.0f;
+constexpr float IMAGE_CENTER_X = 160.0f; // width / 2
+constexpr float IMAGE_CENTER_Y = 120.0f; // height / 2
 
 // ─── DATA STRUCTURES ────────────────────────────────────────────────────
 struct GroundPoint {

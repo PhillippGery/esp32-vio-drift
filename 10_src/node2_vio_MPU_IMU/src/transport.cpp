@@ -10,10 +10,11 @@
 #include <ArduinoJson.h>
 #include "transport.h"
 #include "ekf.h"
+#include <Arduino.h>
 
-static const char* WIFI_SSID = "esp32";
-static const char* WIFI_PASSWORD = "esp32s3seed";
-static const char* UDP_TARGET_IP = "255.255.255.255";
+static const char* WIFI_SSID = "Vpat";
+static const char* WIFI_PASSWORD = "12345678";
+static const char* UDP_TARGET_IP = "10.42.0.1";
 constexpr uint16_t UDP_TARGET_PORT = 4210;
 constexpr uint16_t UDP_LOCAL_PORT = 4211;
 
@@ -22,6 +23,8 @@ static WiFiUDP udp;
 bool drift::transportInit() {
     Serial.printf("[NODE %d] Connecting to WiFi SSID='%s'...\n", NODE_ID, WIFI_SSID);
     WiFi.mode(WIFI_STA);
+    WiFi.setTxPower(WIFI_POWER_8_5dBm); // Reduce transmit power to save energy and reduce interference
+    WiFi.setSleep(false); // Disable WiFi modem sleep to reduce latency and improve stability for UDP transport
     WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
 
     const uint32_t timeout_ms = 15000;
@@ -49,6 +52,7 @@ void drift::sendOdometryPacket(uint32_t timestamp_ms) {
     float px, py, yaw;
     drift::ekfGetPosition(px, py);
     drift::ekfGetOrientation(yaw);
+    float temperature_c = temperatureRead();
 
     JsonDocument packet;
     packet["node"] = NODE_ID;
@@ -56,6 +60,7 @@ void drift::sendOdometryPacket(uint32_t timestamp_ms) {
     packet["px"] = px;
     packet["py"] = py;
     packet["yaw"] = yaw;
+    packet["temperature_c"] = temperature_c;
 
     char buffer[256];
     size_t len = serializeJson(packet, buffer, sizeof(buffer));

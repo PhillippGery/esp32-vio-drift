@@ -39,8 +39,8 @@
 
 
 // ── Task periods (ms) ─────────────────────────────────────────────────────
-constexpr uint32_t IMU_PERIOD_MS   = 5;   // 200 Hz
-constexpr uint32_t TX_PERIOD_MS    = 20;  // 50 Hz
+constexpr uint32_t IMU_PERIOD_MS   = 10;   // 200 Hz
+constexpr uint32_t TX_PERIOD_MS    = 50;  // 50 Hz
 constexpr uint32_t CAM_PERIOD_MS   = 50; // 20 Hz (placeholder)
 constexpr uint32_t PRINT_PERIOD_MS = 300; // 5 Hz telemetry print
 constexpr bool VISION_ENABLED = true;  // Set to false to disable camera and run IMU-only EKF
@@ -59,9 +59,13 @@ struct ImuData {
 static QueueHandle_t imuQueue;
 
 // ── Shared state (camera fusion, read/written only from fusionTask) ────────
+
 static float initial_yaw       = 0.0f;
 static float last_cam_yaw      = initial_yaw;
 static float last_cam_confidence = 0.0f;
+static float last_meas_vx = 0.0f;
+static float last_meas_vy = 0.0f;
+
 
 MPU6050 imu;
 
@@ -111,7 +115,13 @@ void fusionTask(void* pvParameters) {
 
         // Drive the physics engine forward
         drift::ekfPredict(data.ax, data.ay, data.gz, data.dt);
-
+        // ZUPT could be added here if we detect a stationary condition (e.g., low accel and gyro norms) to reduce drift during idle periods.
+        float acc_h = sqrtf(data.ax * data.ax + data.ay * data.ay);
+        bool isStill = (acc_h < 0.2f) && (fabsf(data.gz) < 0.008f);
+        if (isStill) {
+            // Apply a simple zero-velocity update by treating the current velocity as a measurement of zero with low confidence
+            drift::ekfZuptVelocity(); // 0.5 confidence to gently nudge velocity towards zero
+        }
         uint32_t now = millis();
 
         // ── Camera capture ───────────────────────────────────────────────────
@@ -139,9 +149,21 @@ void fusionTask(void* pvParameters) {
 
             // 2. Pass the dt AND the rotation fix into the camera processor
             if (drift::cameraProcessFrame(meas_vx, meas_vy, confidence, cam_dt, delta_yaw_imu)) {
+                //float true_vx = meas_vx *1.9;
+                //float true_vy = meas_vy *1.9;
+                float calibrated_vx = meas_vx * 4.25f; 
+                float calibrated_vy = -meas_vy * 4.25f;
                 last_cam_confidence = confidence;
+                last_meas_vx = meas_vx;
+                last_meas_vy = meas_vy;
+
+                bool spinning = fabsf(delta_yaw_imu / cam_dt) > 0.5f;
+                bool impossible_speed = (fabsf(meas_vx) > 8.0f || fabsf(meas_vy) > 8.0f); // 5 m/s is a sanity check for a small robot
+                if (!spinning && !impossible_speed && confidence > 0.2f) {
+                    drift::ekfUpdateCamera(meas_vx, meas_vy, current_yaw, confidence);
+                }
                 // 3. Fuse the metric, derotated anchor into the physics engine!
-                drift::ekfUpdateCamera(meas_vx, meas_vy, current_yaw, confidence);
+                //drift::ekfUpdateCamera(meas_vx, meas_vy, current_yaw, confidence);
             }
 
             // Reset rate-limit AFTER camera returns so we wait CAM_PERIOD_MS
@@ -158,7 +180,7 @@ void fusionTask(void* pvParameters) {
             float yaw_deg = yaw * (180.0f / PI);
 
             Serial.printf("      (last cam meas: vx=%+.3f m/s, vy=%+.3f m/s, conf=%.2f)\n",
-                          last_cam_yaw, last_cam_yaw, last_cam_confidence);
+                          last_meas_vx, last_meas_vy, last_cam_confidence);
             Serial.printf("[EKF] X: %8.3f m | Y: %8.3f m | Yaw: %8.3f deg\n", px, py, yaw_deg);
         }
 
@@ -196,25 +218,16 @@ void setup() {
     // Calibrate IMU (stationary, flat surface)
     // Init imu
     Serial.println("Calibrating — keep sensor still...");
+    delay(2000);
     imu.calibrate();
     Serial.printf("=== Calibration Complete ===\n");
     Serial.printf("Offsets ax:%.4f ay:%.4f az:%.4f\n",imu.offsetAx, imu.offsetAy, imu.offsetAz);
 
 
 
-    if (VISION_ENABLED) {
-        // TODO (Panchtio): ArduCAM init + test JPEG capture
-        // Initialize XIAO OV3660 Camera Pipeline & PSRAM
-        if (drift::cameraInit()) {
-            Serial.println("[NODE 1] Camera initialized successfully.");
-        } else {
-            Serial.println("[NODE 1] CRITICAL: Camera init failed! Halting.");
-            while (true) { delay(1000); }
-        }
-    } else {
-        Serial.println("[NODE 1] Camera disabled. Running IMU-only EKF.");
-    }
-
+    // ---------------------------------------------------------
+    // 1. TURN ON WIFI FIRST (Let the heavy network stuff settle)
+    // ---------------------------------------------------------
     if (WIFI_ENABLED) {
         if (!drift::transportInit()) {
             Serial.println("[NODE 1] CRITICAL: WiFi/UDP init failed! Halting.");
@@ -223,6 +236,20 @@ void setup() {
         Serial.println("[NODE 1] Transport initialized.");
     } else {
         Serial.println("[NODE 1] WiFi disabled. Running offline.");
+    }
+
+    // ---------------------------------------------------------
+    // 2. TURN ON CAMERA SECOND (Safe to allocate its memory now)
+    // ---------------------------------------------------------
+    if (VISION_ENABLED) {
+        if (drift::cameraInit()) {
+            Serial.println("[NODE 1] Camera initialized successfully.");
+        } else {
+            Serial.println("[NODE 1] CRITICAL: Camera init failed! Halting.");
+            while (true) { delay(1000); }
+        }
+    } else {
+        Serial.println("[NODE 1] Camera disabled. Running IMU-only EKF.");
     }
 
 
@@ -241,7 +268,7 @@ void setup() {
     xTaskCreatePinnedToCore(imuTask,    "imuTask",    4096, nullptr, 5, nullptr, 0);
     xTaskCreatePinnedToCore(fusionTask, "fusionTask", 8192, nullptr, 4, nullptr, 1);
     if (WIFI_ENABLED) {
-        xTaskCreatePinnedToCore(telemetryTask, "telemetryTask", 4096, nullptr, 2, nullptr, 1);
+        xTaskCreatePinnedToCore(telemetryTask, "telemetryTask", 8192, nullptr, 2, nullptr, 1);
     }
 
     Serial.println("[NODE 1] Setup complete.");
