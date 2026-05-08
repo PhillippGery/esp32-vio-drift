@@ -38,7 +38,7 @@
                   }
 \IEEEauthorblockA{School of Electrical and Computer Engineering, Purdue University,
 West Lafayette, IN, USA \\
-\{pgery, vpatkar, benitez, jkester, spisciot\}@purdue.edu}
+\{pgery, vpatkar, benitezf, jkester, spisciot\}@purdue.edu}
 }
 
 \maketitle
@@ -309,9 +309,9 @@ feedback path.}
 Each node uses a Seeed Studio XIAO ESP32-S3 Sense module, which
 integrates a dual-core Tensilica LX7 (240~MHz), 512~kB on-chip SRAM,
 and 8~MB external PSRAM.  The on-board OV3660 sensor provides a
-1632$\times$1232 colour image; we crop and downsample to a
-160$\times$120 grayscale frame before tracking, yielding a 30~kB
-working set per frame.  The IMU is mounted directly above the
+1632$\times$1232 colour image; we capture at QVGA (320$\times$240)
+and convert to grayscale before tracking, yielding a $\sim$75~kB
+working set per frame which sits in PSRAM.  The IMU is mounted directly above the
 camera centre on a 3D-printed stack so that the camera principal
 point and the IMU package coincide laterally; this co-location
 removes a lever-arm term from the derotation step described in
@@ -493,7 +493,66 @@ $\mathbf{P} \leftarrow (\mathbf{I} - \mathbf{K}\mathbf{H})\mathbf{P}$
 is then applied, with the yaw innovation wrapped to
 $[-\pi, \pi)$ before correction.  Matrix inversion uses the
 \texttt{BasicLinearAlgebra} library compiled for the LX7 FPU; for a
-$3\times 3$ system the operation runs in well under 200~$\mu$s.
+$3\times 3$ system the operation runs in well under 200~$\mu$s. All
+implementation parameters used across the four nodes are summarised
+in Table~\ref{tab:params}.
+
+% =====================================================================
+\begin{table}[!t]
+\centering
+\caption{Implementation parameters used across all evaluated configurations.}
+\label{tab:params}
+\renewcommand{\arraystretch}{1.1}
+\footnotesize
+\begin{tabular}{l l}
+\toprule
+\textbf{Parameter} & \textbf{Value} \\
+\midrule
+\multicolumn{2}{l}{\textit{Camera (OV3660)}} \\
+\quad Operating resolution                       & 320$\times$240 grayscale (QVGA) \\
+\quad Frame rate                                 & 20~Hz \\
+\quad Mount height $H$                           & 0.05~m \\
+\quad Mount pitch $\theta$                       & $15.0^{\circ}$ (downward) \\
+\midrule
+\multicolumn{2}{l}{\textit{Inverse Perspective Mapping}} \\
+\quad Focal lengths $f_x, f_y$                   & 500~px \\
+\quad Image centre $(c_x, c_y)$                  & (320, 240)~px \\
+\quad Horizon-rejection threshold                & 0.01~rad \\
+\midrule
+\multicolumn{2}{l}{\textit{FAST-9 corner detection}} \\
+\quad Intensity threshold                        & 20 \\
+\quad Bresenham circle radius / border           & 3~px \\
+\quad Maximum corners per frame                  & 100 \\
+\quad NMS suppression radius                     & 8~px \\
+\midrule
+\multicolumn{2}{l}{\textit{Lucas--Kanade sparse flow}} \\
+\quad Window size                                & $7\times 7$~px \\
+\quad Maximum iterations                         & 5 \\
+\quad Convergence tolerance $\epsilon_{\!LK}$    & 0.01~px \\
+\quad Min.\ structure-tensor det.\               & 1.0 \\
+\midrule
+\multicolumn{2}{l}{\textit{Velocity extraction}} \\
+\quad Min.\ valid features                       & 3 \\
+\quad Robust estimator                           & per-axis median \\
+\quad Confidence floor                           & $1\!\times\!10^{-5}$ \\
+\quad Rotation gate $|\Delta\psi/\Delta t|_{\max}$ & 0.5~rad/s \\
+\midrule
+\multicolumn{2}{l}{\textit{Extended Kalman Filter (6-state planar)}} \\
+\quad Initial diag.\ covariance $P_0$            & 1.0 \\
+\quad $q_{p_x}, q_{p_y}$                         & $1\!\times\!10^{-3}$ \\
+\quad $q_{v_x}, q_{v_y}$                         & $1\!\times\!10^{-2}$ \\
+\quad $q_{\psi}$                                 & $5\!\times\!10^{-4}$ \\
+\quad $q_{b_{\omega_z}}$                         & $1\!\times\!10^{-5}$ \\
+\quad Camera meas.\ noise base $R_0$             & $1\!\times\!10^{-3}$ \\
+\midrule
+\multicolumn{2}{l}{\textit{FreeRTOS scheduling}} \\
+\quad imuTask --- Core 0, prio 5                 & 5~ms (200~Hz) \\
+\quad fusionTask --- Core 1, prio 4              & queue-driven \\
+\quad telemetryTask --- Core 1, prio 2           & 20~ms (50~Hz) \\
+\quad Inter-core queue depth                     & 20 samples \\
+\bottomrule
+\end{tabular}
+\end{table}
 
 % =====================================================================
 \section{Experimental Setup}
@@ -674,13 +733,14 @@ estimate.
 
 \paragraph*{Compute budget}
 On Core 1 of the ESP32-S3 with both PSRAM banks active, FAST-9
-detection on a 160$\times$120 frame completes in approximately
-2~ms, the full LK pass over 80 features in approximately 7~ms,
+detection on a 320$\times$240 frame completes in approximately
+8~ms, the full LK pass over 80 features in approximately 7~ms,
 IPM and derotation in well under 1~ms, and the EKF predict+update
 cycle in under 0.5~ms total.  The dominant single cost is the
 camera DMA transfer, which is overlapped with computation through
-the FreeRTOS task structure.  The full pipeline meets a 20~Hz frame
-rate with margin, leaving Core 0 free for the 200~Hz inertial path.
+the FreeRTOS task structure.  The full pipeline meets the 20~Hz
+frame rate with margin, leaving Core 0 free for the 200~Hz inertial
+path.
 
 % =====================================================================
 \section{Motion-Class Auxiliary Channel (Stretch)}
