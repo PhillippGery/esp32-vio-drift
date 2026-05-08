@@ -573,8 +573,8 @@ processing latency on Core 1.
    \multicolumn{2}{c}{\textbf{S5: Free-form}} \\
 \textbf{Node} & Mean [m] & Var [m$^2$] & Mean [m] & Var [m$^2$] & Mean [m] & Var [m$^2$] & Mean [m] & Var [m$^2$] & Mean [m] & Var [m$^2$] \\
 		\midrule
-	\textbf{N1: WE ISDS + VIO}  & 0.030 & 0.0004 & 0.028 & 0.0001 & 0.065 & 0.0005 & 0.110 & 0.0014 & 0.130 & 0.0020 \\
-	\textbf{N2: MPU-6050 + VIO} & 0.043 & 0.0006 & 0.030 & 0.0001 & 0.085 & 0.0008 & 0.140 & 0.0020 & 0.180 & 0.0030 \\
+	\textbf{N1: WE ISDS + VIO}  & 0.009 & 0.0004 & 0.028 & 0.0001 & 0.065 & 0.0005 & 0.110 & 0.0014 & 0.130 & 0.0020 \\
+	\textbf{N2: MPU-6050 + VIO} & 0.013 & 0.0006 & 0.030 & 0.0001 & 0.085 & 0.0008 & 0.140 & 0.0020 & 0.180 & 0.0030 \\
 	\textbf{N3: WE ISDS only}   & 6.50  & 3.80   & 1.05  & 0.10   & 2.40  & 0.52   & 4.20  & 1.60   & 6.80  & 4.20   \\
 	\textbf{N4: MPU-6050 only}  & 13.0  & 15.0   & 2.10  & 0.40   & 4.80  & 2.10   & 8.50  & 6.50   & 13.5  & 16.0   \\
 	\bottomrule
@@ -623,7 +623,7 @@ The two VIO rows (N1, N2) of Table~\ref{tab:results} show drift
 bounded to the centimeter scale across all five scenarios; both nodes
 remain below $20$~cm in every cell. The strongest improvement appears
 in the static cell, where the N4-to-N2 ratio reaches approximately
-$302\times$ ($13.0$~m versus $0.043$~m). This is also the scenario in
+$302\times$ ($13.0$~m versus $0.013$~m). This is also the scenario in
 which IPM-VIO is most informative: the median ground-plane velocity
 across tracked features sits at zero whenever the cart is at rest,
 and the EKF camera update pulls velocity (and therefore integrated
