@@ -1,4 +1,4 @@
-# DRIFT: Distributed Real-time Inertial and Frame Tracking on a $10 Bare-Metal MCU
+# DRIFT: Downward Real-time Inertial and Frame Tracking on a $10 Bare-Metal MCU
 
 <p align="center">
   <img src="https://img.shields.io/badge/ESP32--S3-Dual%20Core%20240%20MHz-red?logo=espressif&logoColor=white" />
@@ -294,7 +294,7 @@ If you use this work, please cite the paper:
 
 ```bibtex
 @inproceedings{Gery2026Drift,
-  title  = {DRIFT: Distributed Real-time Inertial and Frame Tracking
+  title  = {DRIFT: Downward Real-time Inertial and Frame Tracking
             on a \$10 Bare-Metal Microcontroller},
   author = {Gery, Phillipp and Benitez, Francisco and Pisciotta, Sam
             and Patkar, Vedant and Kester, Jack},

@@ -12,9 +12,9 @@
 \citation{shi1994good}
 \citation{lucas1981kanade,bouguet2001pyramidal}
 \@writefile{toc}{\contentsline {section}{\numberline {I}Introduction}{1}{}\protected@file@percent }
-\newlabel{sec:intro}{{I}{1}{}{}{}}
+\newlabel{sec:intro}{{I}{1}}
 \@writefile{toc}{\contentsline {section}{\numberline {II}Related Work}{1}{}\protected@file@percent }
-\newlabel{sec:related}{{II}{1}{}{}{}}
+\newlabel{sec:related}{{II}{1}}
 \citation{mallot1991ipm}
 \citation{bertozzi1998gold}
 \citation{woodman2007introduction}
@@ -26,40 +26,40 @@
 \citation{rosten2010fast}
 \citation{lucas1981kanade,bouguet2001pyramidal}
 \@writefile{toc}{\contentsline {section}{\numberline {III}System Architecture}{2}{}\protected@file@percent }
-\newlabel{sec:arch}{{III}{2}{}{}{}}
+\newlabel{sec:arch}{{III}{2}}
 \@writefile{toc}{\contentsline {subsection}{\numberline {\mbox  {III-A}}Hardware platform}{2}{}\protected@file@percent }
 \@writefile{toc}{\contentsline {subsection}{\numberline {\mbox  {III-B}}FreeRTOS dual-core partitioning}{2}{}\protected@file@percent }
 \@writefile{toc}{\contentsline {subsection}{\numberline {\mbox  {III-C}}FAST-9 corner detection and Lucas-Kanade flow}{2}{}\protected@file@percent }
-\newlabel{sec:tracking}{{\mbox  {III-C}}{2}{}{}{}}
+\newlabel{sec:tracking}{{\mbox  {III-C}}{2}}
 \@writefile{toc}{\contentsline {subsection}{\numberline {\mbox  {III-D}}Inverse Perspective Mapping}{2}{}\protected@file@percent }
-\newlabel{sec:ipm}{{\mbox  {III-D}}{2}{}{}{}}
-\newlabel{eq:alpha}{{1}{2}{}{}{}}
-\newlabel{eq:y}{{2}{2}{}{}{}}
-\newlabel{eq:beta}{{3}{2}{}{}{}}
-\newlabel{eq:rho}{{4}{2}{}{}{}}
-\newlabel{eq:x}{{5}{2}{}{}{}}
-\@writefile{lof}{\contentsline {figure}{\numberline {1}{\ignorespaces System architecture and dataflow on the ESP32-S3 dual-core. Core~0 services the IMU at 200~Hz and pushes samples into a 20-deep FreeRTOS queue. Core~1 consumes the queue, running EKF prediction on every IMU sample, and at 20~Hz captures a frame and runs FAST-9 corner detection, Lucas-Kanade sparse flow (7$\times $7 window), Inverse Perspective Mapping, gyro-based derotation (using the $\Delta \psi $ derived from the integrated EKF yaw between frames), median filtering, and a rotation gate that drops camera updates when $|\Delta \psi /\Delta t| > 0.5\,\mathrm  {rad/s}$. The metric velocity and yaw drive the EKF measurement update; the resulting state is streamed off-board over UDP at 50~Hz. Dashed line: $\Delta \psi $ feedback path.}}{3}{}\protected@file@percent }
-\newlabel{fig:arch}{{1}{3}{}{}{}}
+\newlabel{sec:ipm}{{\mbox  {III-D}}{2}}
+\newlabel{eq:alpha}{{1}{2}}
+\newlabel{eq:y}{{2}{2}}
+\newlabel{eq:beta}{{3}{2}}
+\newlabel{eq:rho}{{4}{2}}
+\newlabel{eq:x}{{5}{2}}
+\@writefile{lof}{\contentsline {figure}{\numberline {1}{\ignorespaces System architecture and dataflow on the ESP32-S3 dual-core. Core\nobreakspace  {}0 services the IMU at 200\nobreakspace  {}Hz and pushes samples into a 20-deep FreeRTOS queue. Core\nobreakspace  {}1 consumes the queue, running EKF prediction on every IMU sample, and at 20\nobreakspace  {}Hz captures a frame and runs FAST-9 corner detection, Lucas-Kanade sparse flow (7$\times $7 window), Inverse Perspective Mapping, gyro-based derotation (using the $\Delta \psi $ derived from the integrated EKF yaw between frames), median filtering, and a rotation gate that drops camera updates when $|\Delta \psi /\Delta t| > 0.5\,\mathrm  {rad/s}$. The metric velocity and yaw drive the EKF measurement update; the resulting state is streamed off-board over UDP at 50\nobreakspace  {}Hz. Dashed line: $\Delta \psi $ feedback path.}}{3}{}\protected@file@percent }
+\newlabel{fig:arch}{{1}{3}}
 \@writefile{toc}{\contentsline {subsection}{\numberline {\mbox  {III-E}}Gyro-derotated optical flow}{3}{}\protected@file@percent }
-\newlabel{sec:derot}{{\mbox  {III-E}}{3}{}{}{}}
+\newlabel{sec:derot}{{\mbox  {III-E}}{3}}
 \@writefile{toc}{\contentsline {subsection}{\numberline {\mbox  {III-F}}Six-state planar Extended Kalman Filter}{3}{}\protected@file@percent }
-\newlabel{sec:ekf}{{\mbox  {III-F}}{3}{}{}{}}
+\newlabel{sec:ekf}{{\mbox  {III-F}}{3}}
 \@writefile{lot}{\contentsline {table}{\numberline {I}{\ignorespaces Implementation parameters used across all evaluated configurations.}}{4}{}\protected@file@percent }
-\newlabel{tab:params}{{I}{4}{}{}{}}
+\newlabel{tab:params}{{I}{4}}
 \@writefile{toc}{\contentsline {section}{\numberline {IV}Experimental Setup}{4}{}\protected@file@percent }
-\newlabel{sec:exp}{{IV}{4}{}{}{}}
+\newlabel{sec:exp}{{IV}{4}}
 \@writefile{toc}{\contentsline {subsection}{\numberline {\mbox  {IV-A}}The four physical nodes}{4}{}\protected@file@percent }
-\newlabel{sec:nodes}{{\mbox  {IV-A}}{4}{}{}{}}
+\newlabel{sec:nodes}{{\mbox  {IV-A}}{4}}
 \@writefile{toc}{\contentsline {subsection}{\numberline {\mbox  {IV-B}}Trajectory scenarios}{4}{}\protected@file@percent }
-\newlabel{sec:scenarios}{{\mbox  {IV-B}}{4}{}{}{}}
+\newlabel{sec:scenarios}{{\mbox  {IV-B}}{4}}
 \@writefile{toc}{\contentsline {subsection}{\numberline {\mbox  {IV-C}}Metrics and protocol}{4}{}\protected@file@percent }
 \@writefile{toc}{\contentsline {section}{\numberline {V}Results and Discussion}{4}{}\protected@file@percent }
-\newlabel{sec:results}{{V}{4}{}{}{}}
+\newlabel{sec:results}{{V}{4}}
 \citation{david2021tflitemicro,warden2019tinyml}
 \@writefile{lot}{\contentsline {table}{\numberline {II}{\ignorespaces Endpoint drift error per (node, scenario) cell over $n=10$ repeats.}}{5}{}\protected@file@percent }
-\newlabel{tab:results}{{II}{5}{}{}{}}
+\newlabel{tab:results}{{II}{5}}
 \@writefile{toc}{\contentsline {section}{\numberline {VI}Motion-Class Auxiliary Channel (Stretch)}{5}{}\protected@file@percent }
-\newlabel{sec:tinyml}{{VI}{5}{}{}{}}
+\newlabel{sec:tinyml}{{VI}{5}}
 \bibstyle{IEEEtran}
 \bibdata{references}
 \bibcite{forster2014svo}{1}
@@ -81,6 +81,6 @@
 \bibcite{warden2019tinyml}{17}
 \bibcite{liu2020edgeai}{18}
 \@writefile{toc}{\contentsline {section}{\numberline {VII}Conclusion}{6}{}\protected@file@percent }
-\newlabel{sec:conclusion}{{VII}{6}{}{}{}}
+\newlabel{sec:conclusion}{{VII}{6}}
 \@writefile{toc}{\contentsline {section}{References}{6}{}\protected@file@percent }
 \gdef \@abspage@last{6}
